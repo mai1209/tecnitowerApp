@@ -1,0 +1,16 @@
+[Unit]
+Description=Tecnitower local MQTT/Modbus agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/tecnitower-agent/backend-dixell
+EnvironmentFile=/opt/tecnitower-agent/backend-dixell/.env
+ExecStart=/usr/bin/npm run agent:local
+Restart=always
+RestartSec=5
+User=pi
+
+[Install]
+WantedBy=multi-user.target

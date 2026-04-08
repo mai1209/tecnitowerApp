@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: tecnitower-api
+    env: node
+    rootDir: backend-dixell
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: CONTROL_TRANSPORT
+        value: agent-mqtt
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB_NAME
+        value: tecnitower
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN_SECONDS
+        value: 604800
+      - key: MQTT_URL
+        sync: false
+      - key: MQTT_USERNAME
+        sync: false
+      - key: MQTT_PASSWORD
+        sync: false
+      - key: BACKEND_MQTT_CLIENT_ID
+        value: tecnitower-api-production
+      - key: MQTT_TOPIC
+        value: tecnitower/elfins/+/data
+      - key: MQTT_ACK_TOPIC
+        value: tecnitower/elfins/+/ack
+      - key: MQTT_RECONNECT_MS
+        value: 3000
+      - key: MQTT_COMMAND_TIMEOUT_MS
+        value: 12000
+      - key: MQTT_RAW_COMMAND_TOPIC_SUFFIX
+        value: tx
+      - key: MQTT_RAW_RESPONSE_TOPIC_SUFFIX
+        value: rx

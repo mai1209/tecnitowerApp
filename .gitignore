@@ -1,0 +1,16 @@
+# Node
+**/node_modules/
+**/.env
+
+# Android
+**/android/build/
+**/android/.gradle/
+**/android/app/build/
+
+# iOS
+**/ios/Pods/
+**/ios/build/
+
+# Logs
+npm-debug.log*
+yarn-error.log*

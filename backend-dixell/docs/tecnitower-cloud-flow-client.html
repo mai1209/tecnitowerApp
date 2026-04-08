@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tecnitower - Esquema Cliente</title>
+    <style>
+      :root {
+        --bg: #f7f4ee;
+        --paper: #fffdfa;
+        --ink: #172124;
+        --muted: #647175;
+        --line: #d8ccbb;
+        --accent: #1e6a5b;
+        --soft: #edf4ef;
+        --soft-2: #f6ece0;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at top left, #efe7d7 0, transparent 28%),
+          radial-gradient(circle at bottom right, #e3efe7 0, transparent 26%),
+          var(--bg);
+        color: var(--ink);
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+      }
+
+      .page {
+        width: 1200px;
+        margin: 0 auto;
+        padding: 52px 52px 60px;
+        background: var(--paper);
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 24px;
+        align-items: end;
+        margin-bottom: 28px;
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-size: 38px;
+        line-height: 1.02;
+        letter-spacing: -0.03em;
+      }
+
+      .lead {
+        max-width: 720px;
+        margin: 0;
+        font-size: 16px;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      .summary {
+        border: 2px solid var(--line);
+        border-radius: 22px;
+        padding: 18px 20px;
+        background: linear-gradient(180deg, #fff 0%, #faf6ef 100%);
+      }
+
+      .summary strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 15px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--accent);
+      }
+
+      .summary p {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      .board {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 22px;
+        margin-top: 20px;
+      }
+
+      .panel {
+        border: 2px solid var(--line);
+        border-radius: 24px;
+        padding: 20px;
+      }
+
+      .panel.cloud {
+        background: var(--soft);
+      }
+
+      .panel.local {
+        background: var(--soft-2);
+      }
+
+      .panel h2 {
+        margin: 0 0 14px;
+        font-size: 18px;
+      }
+
+      .flow {
+        display: grid;
+        gap: 14px;
+      }
+
+      .box {
+        border: 2px solid rgba(23, 33, 36, 0.1);
+        border-radius: 18px;
+        padding: 16px 18px;
+        background: #fff;
+        min-height: 88px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+
+      .box strong {
+        display: block;
+        margin-bottom: 5px;
+        font-size: 18px;
+      }
+
+      .box span {
+        font-size: 14px;
+        line-height: 1.4;
+        color: var(--muted);
+      }
+
+      .arrow {
+        text-align: center;
+        font-size: 30px;
+        color: var(--accent);
+        font-weight: 700;
+        line-height: 1;
+      }
+
+      .roundtrip {
+        margin-top: 28px;
+        border: 2px solid var(--line);
+        border-radius: 22px;
+        padding: 22px;
+        background: #fff;
+      }
+
+      .roundtrip h3 {
+        margin: 0 0 14px;
+        font-size: 22px;
+      }
+
+      .journey {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        font-size: 15px;
+        line-height: 1.45;
+      }
+
+      .chip {
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: #f4f8f6;
+        border: 1px solid #cddcd4;
+      }
+
+      .chip.local {
+        background: #fbf3ea;
+        border-color: #e1cdb5;
+      }
+
+      .footnote {
+        margin-top: 18px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      @media print {
+        body {
+          background: #fff;
+        }
+
+        .page {
+          width: auto;
+          margin: 0;
+          padding: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div>
+          <h1>Tecnitower<br />Esquema de Funcionamiento</h1>
+          <p class="lead">
+            El usuario usa la app desde cualquier lugar. La nube envía el
+            comando a un agente local dentro del negocio, y ese agente se
+            comunica con el controlador físico a través del Elfin.
+          </p>
+        </div>
+        <aside class="summary">
+          <strong>Idea Principal</strong>
+          <p>
+            La nube gestiona usuarios y comandos. El equipo local conecta esa
+            nube con el controlador físico.
+          </p>
+        </aside>
+      </section>
+
+      <section class="board">
+        <article class="panel cloud">
+          <h2>Nube</h2>
+          <div class="flow">
+            <div class="box">
+              <strong>App Móvil</strong>
+              <span>Visualiza temperaturas, alarmas y setpoint.</span>
+            </div>
+            <div class="arrow">↓</div>
+            <div class="box">
+              <strong>Backend Tecnitower</strong>
+              <span>Valida usuarios, procesa órdenes y administra equipos.</span>
+            </div>
+            <div class="arrow">↓</div>
+            <div class="box">
+              <strong>EMQX MQTT</strong>
+              <span>Canal seguro entre la nube y el agente local.</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel local">
+          <h2>Local del Cliente</h2>
+          <div class="flow">
+            <div class="box">
+              <strong>Agente Local</strong>
+              <span>Mac, Raspberry o mini PC conectada al WiFi/LAN del local.</span>
+            </div>
+            <div class="arrow">↓</div>
+            <div class="box">
+              <strong>Elfin EW11A</strong>
+              <span>Puente entre red local y RS485.</span>
+            </div>
+            <div class="arrow">↓</div>
+            <div class="box">
+              <strong>TC900E</strong>
+              <span>Controlador que entrega lecturas y recibe cambios.</span>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="roundtrip">
+        <h3>Recorrido de la información</h3>
+        <div class="journey">
+          <span class="chip">App</span>
+          <span>→</span>
+          <span class="chip">Backend</span>
+          <span>→</span>
+          <span class="chip">EMQX</span>
+          <span>→</span>
+          <span class="chip local">Agente Local</span>
+          <span>→</span>
+          <span class="chip local">Elfin</span>
+          <span>→</span>
+          <span class="chip local">TC900E</span>
+        </div>
+
+        <div class="journey" style="margin-top: 14px;">
+          <span class="chip local">TC900E</span>
+          <span>→</span>
+          <span class="chip local">Elfin</span>
+          <span>→</span>
+          <span class="chip local">Agente Local</span>
+          <span>→</span>
+          <span class="chip">EMQX</span>
+          <span>→</span>
+          <span class="chip">Backend</span>
+          <span>→</span>
+          <span class="chip">App</span>
+        </div>
+
+        <div class="footnote">
+          En esta solución el Elfin no se conecta directamente a internet. El
+          equipo que publica y recibe por MQTT es el agente local.
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
