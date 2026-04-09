@@ -5,8 +5,19 @@ const DEFAULT_PORT = Number(process.env.TCP_GATEWAY_PORT ?? 4001);
 const DEFAULT_TIMEOUT_MS = Number(process.env.TCP_GATEWAY_TIMEOUT_MS ?? 12000);
 const DEBUG_TCP_GATEWAY = String(process.env.DEBUG_TCP_GATEWAY ?? "").trim() === "1";
 
+// Delay en ms tras el registro del Elfin antes de aceptar comandos.
+// Evita la carrera inicial donde la app dispara fetchDiagnostic
+// antes de que el canal RS485 esté estable.
+const READY_DELAY_MS = Number(process.env.TCP_GATEWAY_READY_DELAY_MS ?? 400);
+
+// Intervalo de keep-alive TCP en ms. Mantiene viva la conexión NAT
+// en routers domésticos/industriales que cierran sesiones idle.
+const KEEP_ALIVE_INTERVAL_MS = Number(process.env.TCP_GATEWAY_KEEP_ALIVE_MS ?? 10000);
+
 let tcpServer = null;
 const connections = new Map();
+
+// ─── utilidades ────────────────────────────────────────────────────────────────
 
 function canonicalizeElfinId(value = "") {
   return String(value ?? "")
@@ -39,6 +50,8 @@ function logPrefix(state) {
   return state?.elfinId ? `[TCP GATEWAY ${state.elfinId}]` : "[TCP GATEWAY]";
 }
 
+// ─── gestión de conexiones ─────────────────────────────────────────────────────
+
 function attachConnection(elfinId, state) {
   const normalizedElfinId = getNormalizedElfinId(elfinId);
   const previous = connections.get(normalizedElfinId);
@@ -51,8 +64,19 @@ function attachConnection(elfinId, state) {
 
   state.elfinId = normalizedElfinId;
   state.registeredAt = new Date();
+  state.ready = false; // canal RS485 aún no estable
+
   connections.set(normalizedElfinId, state);
   console.log(`${logPrefix(state)} conexión registrada`);
+
+  // Marcar como listo después del delay para evitar la carrera inicial
+  setTimeout(() => {
+    // Verificar que el socket siga siendo el mismo (no fue reemplazado)
+    if (connections.get(normalizedElfinId) === state && !state.socket.destroyed) {
+      state.ready = true;
+      console.log(`${logPrefix(state)} canal RS485 listo`);
+    }
+  }, READY_DELAY_MS);
 }
 
 function detachConnection(state) {
@@ -62,6 +86,8 @@ function detachConnection(state) {
     connections.delete(state.elfinId);
   }
 }
+
+// ─── identificación del Elfin ──────────────────────────────────────────────────
 
 function tryRegisterElfin(state, chunk) {
   state.identityBuffer += chunk.toString("utf8");
@@ -87,6 +113,8 @@ function tryRegisterElfin(state, chunk) {
   return false;
 }
 
+// ─── resolución de respuestas pendientes ───────────────────────────────────────
+
 function resolvePending(state) {
   const pending = state.pending;
   if (!pending) return;
@@ -99,6 +127,8 @@ function resolvePending(state) {
   state.buffer = state.buffer.subarray(match.consumedBytes ?? state.buffer.length);
   pending.resolve(Buffer.from(match.frame));
 }
+
+// ─── handlers de socket ────────────────────────────────────────────────────────
 
 function handleSocketData(state, chunk) {
   state.lastSeenAt = new Date();
@@ -133,6 +163,7 @@ function createConnectionState(socket) {
     elfinId: null,
     registeredAt: null,
     lastSeenAt: null,
+    ready: false,
     identityBuffer: "",
     buffer: Buffer.alloc(0),
     pending: null,
@@ -149,6 +180,8 @@ function createConnectionState(socket) {
   return state;
 }
 
+// ─── servidor TCP ──────────────────────────────────────────────────────────────
+
 export function startTcpGatewayServer() {
   if (tcpServer) return tcpServer;
 
@@ -157,6 +190,12 @@ export function startTcpGatewayServer() {
   }
 
   tcpServer = net.createServer((socket) => {
+    // Keep-alive TCP: mantiene viva la sesión NAT del router del cliente.
+    // Sin esto, routers domésticos/industriales cierran la conexión idle
+    // en 30-300s y el backend no se entera hasta el próximo tx.
+    socket.setKeepAlive(true, KEEP_ALIVE_INTERVAL_MS);
+    socket.setTimeout(0); // sin timeout de inactividad por parte de Node
+
     const state = createConnectionState(socket);
     console.log("[TCP GATEWAY] conexión entrante", {
       remoteAddress: socket.remoteAddress,
@@ -189,6 +228,8 @@ export async function stopTcpGatewayServer() {
   tcpServer = null;
 }
 
+// ─── info de conexión ──────────────────────────────────────────────────────────
+
 export function getTcpGatewayConnectionInfo(elfinId) {
   const state = connections.get(getNormalizedElfinId(elfinId));
   if (!state) return null;
@@ -197,16 +238,25 @@ export function getTcpGatewayConnectionInfo(elfinId) {
     elfinId: state.elfinId,
     registeredAt: state.registeredAt,
     lastSeenAt: state.lastSeenAt,
+    ready: state.ready,
     remoteAddress: state.socket.remoteAddress,
     remotePort: state.socket.remotePort,
   };
 }
 
+// ─── comando raw ───────────────────────────────────────────────────────────────
+
 export function sendTcpClientRawCommand(elfinId, frameBuffer, { matcher, timeoutMs } = {}) {
   const normalizedElfinId = getNormalizedElfinId(elfinId);
   const state = connections.get(normalizedElfinId);
+
   if (!state?.socket || state.socket.destroyed) {
     throw new Error(`Elfin TCP Client no conectado (${normalizedElfinId})`);
+  }
+
+  // Canal RS485 aún estabilizándose tras el handshake inicial
+  if (!state.ready) {
+    throw new Error(`Elfin TCP Client no listo aún (${normalizedElfinId})`);
   }
 
   if (typeof matcher !== "function") {
@@ -229,20 +279,28 @@ export function sendTcpClientRawCommand(elfinId, frameBuffer, { matcher, timeout
       if (state.pending?.timeout === timer) {
         state.pending = null;
       }
-      reject(new Error(`Timeout esperando respuesta TCP del Elfin (${normalizedElfinId})`));
+      reject(
+        new Error(`Timeout esperando respuesta TCP del Elfin (${normalizedElfinId})`)
+      );
     }, Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS);
 
     state.pending = { matcher, resolve, reject, timeout: timer };
+
     if (DEBUG_TCP_GATEWAY) {
       console.log(`${logPrefix(state)} tx ${buffer.length} bytes`, {
         hex: toHexPreview(buffer),
       });
     }
+
     state.socket.write(buffer, (err) => {
       if (!err) return;
       clearTimeout(timer);
       state.pending = null;
-      reject(err);
+      // Limpiar el Map: el socket está muerto, no sirve para futuros comandos
+      detachConnection(state);
+      reject(
+        new Error(`Socket muerto al escribir (${normalizedElfinId}): ${err.message}`)
+      );
     });
   });
 }
