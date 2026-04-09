@@ -3,6 +3,7 @@ import net from "net";
 const DEFAULT_HOST = process.env.TCP_GATEWAY_HOST ?? "0.0.0.0";
 const DEFAULT_PORT = Number(process.env.TCP_GATEWAY_PORT ?? 4001);
 const DEFAULT_TIMEOUT_MS = Number(process.env.TCP_GATEWAY_TIMEOUT_MS ?? 12000);
+const DEBUG_TCP_GATEWAY = String(process.env.DEBUG_TCP_GATEWAY ?? "").trim() === "1";
 
 let tcpServer = null;
 const connections = new Map();
@@ -13,6 +14,17 @@ function canonicalizeElfinId(value = "") {
     .toUpperCase()
     .replace(/^(ELFIN|ID|MAC)\s*[:=]\s*/i, "")
     .replace(/[^A-Z0-9]/g, "");
+}
+
+function looksLikeElfinId(value = "") {
+  const normalized = canonicalizeElfinId(value);
+  return normalized.length >= 8 && /\d/.test(normalized);
+}
+
+function toHexPreview(buffer, maxBytes = 32) {
+  const bytes = Buffer.from(buffer ?? []);
+  const preview = bytes.subarray(0, maxBytes).toString("hex");
+  return bytes.length > maxBytes ? `${preview}...` : preview;
 }
 
 function getNormalizedElfinId(value = "") {
@@ -57,8 +69,8 @@ function tryRegisterElfin(state, chunk) {
   state.identityBuffer = parts.pop() ?? "";
 
   for (const rawPart of parts) {
+    if (!looksLikeElfinId(rawPart)) continue;
     const normalized = canonicalizeElfinId(rawPart);
-    if (!normalized) continue;
     attachConnection(normalized, state);
     return true;
   }
@@ -66,7 +78,7 @@ function tryRegisterElfin(state, chunk) {
   const immediateCandidate = state.identityBuffer.trim();
   const printableAscii = /^[\x20-\x7E]+$/.test(immediateCandidate);
   const normalizedImmediate = canonicalizeElfinId(immediateCandidate);
-  if (printableAscii && normalizedImmediate.length >= 6) {
+  if (printableAscii && looksLikeElfinId(normalizedImmediate)) {
     attachConnection(normalizedImmediate, state);
     state.identityBuffer = "";
     return true;
@@ -90,6 +102,13 @@ function resolvePending(state) {
 
 function handleSocketData(state, chunk) {
   state.lastSeenAt = new Date();
+
+  if (DEBUG_TCP_GATEWAY) {
+    console.log(`${logPrefix(state)} rx ${Buffer.byteLength(chunk)} bytes`, {
+      hex: toHexPreview(chunk),
+      pending: Boolean(state.pending),
+    });
+  }
 
   if (!state.elfinId && tryRegisterElfin(state, chunk)) {
     return;
@@ -214,6 +233,11 @@ export function sendTcpClientRawCommand(elfinId, frameBuffer, { matcher, timeout
     }, Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS);
 
     state.pending = { matcher, resolve, reject, timeout: timer };
+    if (DEBUG_TCP_GATEWAY) {
+      console.log(`${logPrefix(state)} tx ${buffer.length} bytes`, {
+        hex: toHexPreview(buffer),
+      });
+    }
     state.socket.write(buffer, (err) => {
       if (!err) return;
       clearTimeout(timer);

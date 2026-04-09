@@ -81,7 +81,7 @@ export type SetpointScanResponse = {
 
 function resolveDevApiUrl() {
   // IP por defecto del backend en la red local (Mac actual)
-  const LAN_IP = "http://192.168.100.48:3001"; 
+  const LAN_IP = "http://137.131.194.247:3001"; 
 
   const scriptURL: string | undefined = NativeModules?.SourceCode?.scriptURL;
   if (!scriptURL) return LAN_IP;
