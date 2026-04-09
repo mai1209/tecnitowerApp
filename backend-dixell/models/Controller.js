@@ -52,7 +52,7 @@ const controllerSchema = new mongoose.Schema(
       type: String,
       trim: true,
       lowercase: true,
-      enum: ["direct", "agent-mqtt", "elfin-mqtt"],
+      enum: ["direct", "agent-mqtt", "elfin-mqtt", "tcp-client"],
     },
     elfinId: {
       type: String,

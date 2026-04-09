@@ -13,6 +13,10 @@ import { ControllerModel } from "../models/Controller.js";
 import { DeviceModel } from "../models/DixellModel.js";
 import { mqttClient, publishMqttCommand, setWritingStatus } from "../mqtt/mqttListener.js";
 import { writeRegisterValueViaElfinMqtt } from "../services/elfinMqttModbusService.js";
+import {
+  readRegistersSnapshotViaElfinTcpClient,
+  writeRegisterValueViaElfinTcpClient,
+} from "../services/elfinTcpClientModbusService.js";
 
 const XR35_SETPOINT_REGISTER = 768;
 const STATUS_REGISTER = 1280;
@@ -181,6 +185,14 @@ function normalizeTransport(value) {
   const transport = String(value ?? "").trim().toLowerCase();
   if (transport === "mqtt" || transport === "cloud" || transport === "agent-mqtt") return "agent-mqtt";
   if (transport === "mqtt-raw" || transport === "elfin-mqtt") return "elfin-mqtt";
+  if (
+    transport === "tcp-client" ||
+    transport === "tcp_client" ||
+    transport === "elfin-tcp-client" ||
+    transport === "elfin-tcp"
+  ) {
+    return "tcp-client";
+  }
   return "direct";
 }
 
@@ -196,8 +208,17 @@ function shouldUseElfinMqttControl(controller = null) {
   return getControlTransport(controller) === "elfin-mqtt";
 }
 
+function shouldUseTcpClientControl(controller = null) {
+  return getControlTransport(controller) === "tcp-client";
+}
+
 function shouldUseMqttControl(controller = null) {
   return shouldUseAgentMqttControl(controller) || shouldUseElfinMqttControl(controller);
+}
+
+function requiresLocalIp(gatewayMode) {
+  const transport = normalizeTransport(gatewayMode);
+  return transport !== "elfin-mqtt" && transport !== "tcp-client";
 }
 
 function buildMqttWriteCommand({ connection, definition, value, debugLabel }) {
@@ -318,6 +339,21 @@ async function writeDefinitionValue({ controller, definition, value }) {
     });
   }
 
+  if (shouldUseTcpClientControl(controller)) {
+    return writeRegisterValueViaElfinTcpClient(value, {
+      elfinId: controller.elfinId,
+      unitId: connection.unitId,
+      register: definition.register,
+      verifyRegister: definition.verifyRegister ?? definition.register,
+      scale: definition.scale ?? 10,
+      min: definition.min,
+      max: definition.max,
+      dataType: definition.dataType ?? "number",
+      functionCode: definition.functionCode ?? "auto",
+      debugLabel,
+    });
+  }
+
   if (shouldUseAgentMqttControl(controller)) {
     const ack = await publishMqttCommand(
       controller.elfinId,
@@ -364,10 +400,10 @@ export const createController = async (req, res, next) => {
     const ipAddress = String(req.body?.ipAddress ?? "").trim();
     const gatewayMode = normalizeTransport(req.body?.gatewayMode ?? process.env.CONTROL_TRANSPORT ?? "direct");
 
-    if (!name || !elfinId || (gatewayMode !== "elfin-mqtt" && !ipAddress)) {
+    if (!name || !elfinId || (requiresLocalIp(gatewayMode) && !ipAddress)) {
       return res.status(400).json({
         error:
-          gatewayMode === "elfin-mqtt"
+          !requiresLocalIp(gatewayMode)
             ? "name y elfinId son obligatorios"
             : "name, elfinId e ipAddress son obligatorios",
       });
@@ -573,6 +609,7 @@ export const diagnosticController = async (req, res) => {
     let setpointsRaw = {};
     let modbusOnline = false;
     let mqttRegistersRaw = null;
+    let tcpClientRegistersRaw = null;
     const visibleDefinitions = getControllerVisibleDefinitions(controller);
 
     if (shouldUseAgentMqttControl(controller)) {
@@ -602,6 +639,35 @@ export const diagnosticController = async (req, res) => {
       } catch (err) {
         console.error("❌ [DIAGNOSTIC MQTT AGENT ERROR]:", err?.message || err);
       }
+    } else if (shouldUseTcpClientControl(controller)) {
+      try {
+        const registers = [
+          controller?.probe1,
+          displayRegister,
+          setpointDefinition.register,
+          ...visibleDefinitions.map((definition) => definition.register),
+        ];
+        const uniqueRegisters = [...new Set(registers.filter((value) => Number.isFinite(Number(value))).map(Number))];
+        tcpClientRegistersRaw = await readRegistersSnapshotViaElfinTcpClient({
+          elfinId: controller.elfinId,
+          unitId: connection.unitId,
+          registers: uniqueRegisters,
+        });
+        probeRaw = getSnapshotRegisterValue(tcpClientRegistersRaw, controller?.probe1);
+        setpointsRaw = {
+          [displayRegister]: getSnapshotRegisterValue(tcpClientRegistersRaw, displayRegister),
+          [setpointDefinition.register]: getSnapshotRegisterValue(
+            tcpClientRegistersRaw,
+            setpointDefinition.register
+          ),
+        };
+        modbusOnline = Object.values(tcpClientRegistersRaw ?? {}).some((value) => {
+          if (value === null || value === undefined || value === "") return false;
+          return Number.isFinite(Number(value));
+        });
+      } catch (err) {
+        console.error("❌ [DIAGNOSTIC TCP CLIENT ERROR]:", err?.message || err);
+      }
     } else if (shouldUseMqttControl(controller)) {
       publishReadCommands(controller, [
         controller?.probe1,
@@ -626,28 +692,36 @@ export const diagnosticController = async (req, res) => {
 
     let configuredRegisters = [];
     try {
-      if (shouldUseMqttControl(controller)) {
+      if (shouldUseMqttControl(controller) || shouldUseTcpClientControl(controller)) {
         throw new Error("CONTROL_TRANSPORT=mqtt");
       }
 
       configuredRegisters = await readRegisterDefinitionsValues({ connection, definitions: visibleDefinitions });
     } catch (err) {
-      if (mqttRegistersRaw) {
+      if (tcpClientRegistersRaw) {
+        configuredRegisters = buildDefinitionValuesFromRegisterSnapshot(
+          visibleDefinitions,
+          tcpClientRegistersRaw,
+          "tcp-client"
+        );
+      } else if (mqttRegistersRaw) {
         configuredRegisters = buildDefinitionValuesFromRegisterSnapshot(visibleDefinitions, mqttRegistersRaw);
       } else if (shouldUseAgentMqttControl(controller)) {
         configuredRegisters = buildDefinitionValuesFromRegisterSnapshot(visibleDefinitions, null);
+      } else if (shouldUseTcpClientControl(controller)) {
+        configuredRegisters = buildDefinitionValuesFromRegisterSnapshot(visibleDefinitions, null, "tcp-client");
       } else {
         configuredRegisters = buildDefinitionValuesFromTelemetry(visibleDefinitions, telemetry);
       }
 
-      if (!shouldUseAgentMqttControl(controller)) {
+      if (!shouldUseAgentMqttControl(controller) && !shouldUseTcpClientControl(controller)) {
         publishReadCommands(controller, visibleDefinitions.map((definition) => definition.register));
       }
     }
 
     const probeScale = 10;
     const scale = setpointDefinition.scale ?? 10;
-    const useTelemetryFallback = !shouldUseAgentMqttControl(controller);
+    const useTelemetryFallback = !shouldUseAgentMqttControl(controller) && !shouldUseTcpClientControl(controller);
     const telemetryProbeRaw = useTelemetryFallback
       ? getTelemetryRegisterValue(telemetry, controller?.probe1)
       : null;
@@ -668,12 +742,12 @@ export const diagnosticController = async (req, res) => {
       : telemetryProbeValue ?? (useTelemetryFallback ? telemetry?.probe1Value : null) ?? null;
 
     let userParams768 = null;
-    if (!shouldUseMqttControl(controller) && String(controller?.dixellModel ?? "").toUpperCase() === "XR35CX") {
+    if (!shouldUseMqttControl(controller) && !shouldUseTcpClientControl(controller) && String(controller?.dixellModel ?? "").toUpperCase() === "XR35CX") {
       userParams768 = await readUserParams768Block({ connection, scale });
     }
 
     let status1280 = null;
-    if (!shouldUseMqttControl(controller)) {
+    if (!shouldUseMqttControl(controller) && !shouldUseTcpClientControl(controller)) {
       try {
         const snap = await readRegistersSnapshot([STATUS_REGISTER], connection);
         const raw = snap?.[STATUS_REGISTER];
@@ -696,7 +770,7 @@ export const diagnosticController = async (req, res) => {
       }
     }
 
-    const online = shouldUseAgentMqttControl(controller)
+    const online = shouldUseAgentMqttControl(controller) || shouldUseTcpClientControl(controller)
       ? modbusOnline
       : modbusOnline || Boolean(telemetry);
 
@@ -875,7 +949,7 @@ export const updateControllerConnectionConfig = async (req, res) => {
 
     if (req.body?.ipAddress != null) {
       const ipAddress = String(req.body.ipAddress).trim();
-      if (!ipAddress && controller.gatewayMode !== "elfin-mqtt") {
+      if (!ipAddress && requiresLocalIp(controller.gatewayMode)) {
         return res.status(400).json({ error: "IP inválida" });
       }
       controller.ipAddress = ipAddress || undefined;

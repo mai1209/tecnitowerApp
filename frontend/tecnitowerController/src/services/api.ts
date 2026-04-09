@@ -23,7 +23,7 @@ export type LoginPayload = {
 
 export type ControllerPayload = {
   name: string;
-  gatewayMode?: "direct" | "agent-mqtt" | "elfin-mqtt";
+  gatewayMode?: "direct" | "agent-mqtt" | "elfin-mqtt" | "tcp-client";
   deviceBrand?: string;
   deviceModel?: string;
   deviceModelId?: string;

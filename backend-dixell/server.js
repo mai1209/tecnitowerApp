@@ -9,6 +9,7 @@ import controllerRoutes from "./routes/controllerRoutes.js";
 import dixellModelRoutes from "./routes/dixellModelRoutes.js";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
 import { startMqttListener } from "./mqtt/mqttListener.js";
+import { startTcpGatewayServer, stopTcpGatewayServer } from "./tcp/elfinTcpGatewayServer.js";
 
 const app = express();
 app.use(cors());
@@ -35,6 +36,7 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 let server = null;
+let tcpGatewayServer = null;
 // Cambiamos esto para que sea accesible si es necesario, 
 // aunque lo ideal es importarlo desde el mqttService
 let mqttClientInstance = null; 
@@ -53,6 +55,12 @@ async function shutdown(signal, exitCode = 0) {
       console.log("✔ MQTT client desconectado");
     }
 
+    if (tcpGatewayServer) {
+      await stopTcpGatewayServer();
+      tcpGatewayServer = null;
+      console.log("✔ TCP gateway cerrado");
+    }
+
     await disconnectMongo();
     console.log("✔ MongoDB desconectado");
 
@@ -69,6 +77,7 @@ async function bootstrap() {
     
     // Iniciamos el listener y guardamos la instancia
     mqttClientInstance = startMqttListener();
+    tcpGatewayServer = startTcpGatewayServer();
 
     server = app.listen(PORT, HOST, () => {
       console.log(`🚀 Servidor listo en http://${HOST}:${PORT}`);

@@ -18,6 +18,7 @@ Ademas, el proyecto ya permite guardar el modo de gateway por controlador:
 
 ```text
 agent-mqtt   -> recomendado para Raspberry/mini PC/Mac local
+tcp-client   -> Elfin conectado como TCP Client a un puerto publico del backend/VPS
 elfin-mqtt   -> experimental para gateways MQTT directos compatibles
 direct       -> desarrollo local
 ```
@@ -52,6 +53,9 @@ MQTT_TOPIC=tecnitower/elfins/+/data
 MQTT_ACK_TOPIC=tecnitower/elfins/+/ack
 MQTT_RECONNECT_MS=3000
 MQTT_COMMAND_TIMEOUT_MS=12000
+TCP_GATEWAY_HOST=0.0.0.0
+TCP_GATEWAY_PORT=4001
+TCP_GATEWAY_TIMEOUT_MS=12000
 ```
 
 En Render, el `render.yaml` ya deja `CONTROL_TRANSPORT=agent-mqtt`. En Northflank cargar estas variables manualmente.
@@ -61,6 +65,12 @@ Archivo base para copiar:
 
 ```text
 backend-dixell/.env.northflank.example
+```
+
+Si el modo del controlador es `tcp-client`, además de `3001` tenés que exponer un segundo puerto TCP público:
+
+```text
+4001/TCP
 ```
 
 ## 2. Agente local de demo

@@ -26,7 +26,7 @@ type Props = {
 
 function ControllerFormScreen({ navigation, session }: Props) {
   const [name, setName] = useState('');
-  const [gatewayMode, setGatewayMode] = useState<'agent-mqtt' | 'elfin-mqtt'>('agent-mqtt');
+  const [gatewayMode, setGatewayMode] = useState<'agent-mqtt' | 'elfin-mqtt' | 'tcp-client'>('tcp-client');
   const [deviceModel, setDeviceModel] = useState('');
   const [deviceBrand, setDeviceBrand] = useState('');
   const [elfinId, setElfinId] = useState('');
@@ -72,7 +72,7 @@ function ControllerFormScreen({ navigation, session }: Props) {
   };
 
   const handleSubmit = async () => {
-    const requiresLocalIp = gatewayMode !== 'elfin-mqtt';
+    const requiresLocalIp = gatewayMode === 'agent-mqtt';
     if (!name || !elfinId || (requiresLocalIp && !ipAddress)) {
       setError('Por favor, completa todos los campos obligatorios.');
       return;
@@ -169,6 +169,26 @@ function ControllerFormScreen({ navigation, session }: Props) {
                 <TouchableOpacity
                   style={[
                     styles.modeCard,
+                    gatewayMode === 'tcp-client' && styles.modeCardActive,
+                  ]}
+                  onPress={() => setGatewayMode('tcp-client')}
+                >
+                  <Text
+                    style={[
+                      styles.modeTitle,
+                      gatewayMode === 'tcp-client' && styles.modeTitleActive,
+                    ]}
+                  >
+                    Elfin TCP Client
+                  </Text>
+                  <Text style={styles.modeDescription}>
+                    Recomendado si querés evitar Raspberry. El Elfin sale directo a un puerto TCP del servidor.
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.modeCard,
                     gatewayMode === 'agent-mqtt' && styles.modeCardActive,
                   ]}
                   onPress={() => setGatewayMode('agent-mqtt')}
@@ -216,11 +236,11 @@ function ControllerFormScreen({ navigation, session }: Props) {
               />
 
               <InputField
-                label={gatewayMode === 'elfin-mqtt' ? 'Dirección IP Local (opcional)' : 'Dirección IP'}
+                label={gatewayMode === 'agent-mqtt' ? 'Dirección IP' : 'Dirección IP Local (opcional)'}
                 icon={<Globe size={16} color="#64748B" />}
                 value={ipAddress}
                 onChangeText={setIpAddress}
-                placeholder={gatewayMode === 'elfin-mqtt' ? 'Opcional si el gateway va directo por MQTT' : '192.168.1.XX'}
+                placeholder={gatewayMode === 'agent-mqtt' ? '192.168.1.XX' : 'Opcional si el gateway sale directo a la nube'}
                 keyboardType="numbers-and-punctuation"
               />
 
