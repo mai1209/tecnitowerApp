@@ -1,7 +1,11 @@
 import { sendTcpClientRawCommand } from "../tcp/elfinTcpGatewayServer.js";
 
 const DEFAULT_SETPOINT_SCALE = 10;
+const DEFAULT_TCP_CLIENT_MODBUS_MODE = normalizeTcpClientModbusMode(
+  process.env.TCP_CLIENT_MODBUS_MODE ?? "rtu"
+);
 const pendingLocks = new Map();
+let nextTransactionId = 1;
 
 function withElfinTcpLock(elfinId, fn) {
   const key = String(elfinId ?? "").trim().toUpperCase();
@@ -16,6 +20,31 @@ function withElfinTcpLock(elfinId, fn) {
     })
   );
   return next;
+}
+
+function normalizeTcpClientModbusMode(value) {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (
+    normalized === "tcp" ||
+    normalized === "modbus-tcp" ||
+    normalized === "modbus_tcp" ||
+    normalized === "mbap"
+  ) {
+    return "modbus-tcp";
+  }
+  return "rtu";
+}
+
+function getTcpClientModbusMode(value) {
+  return normalizeTcpClientModbusMode(value ?? DEFAULT_TCP_CLIENT_MODBUS_MODE);
+}
+
+function allocateTransactionId() {
+  const transactionId = nextTransactionId;
+  nextTransactionId = nextTransactionId >= 0xffff ? 1 : nextTransactionId + 1;
+  return transactionId;
 }
 
 function crc16Modbus(buffer) {
@@ -44,6 +73,15 @@ function hasValidCrc(frame) {
   return expected === actual;
 }
 
+function buildModbusTcpFrame({ transactionId, unitId, pdu }) {
+  const mbap = Buffer.alloc(7);
+  mbap.writeUInt16BE(transactionId, 0);
+  mbap.writeUInt16BE(0, 2);
+  mbap.writeUInt16BE(pdu.length + 1, 4);
+  mbap[6] = unitId;
+  return Buffer.concat([mbap, pdu]);
+}
+
 function toSigned16(value) {
   const v = Number(value);
   if (!Number.isFinite(v)) return null;
@@ -67,7 +105,16 @@ function normalizeWriteValue(value, { scale = 1, dataType = "number" } = {}) {
   return Math.round(numericValue * scale);
 }
 
-function buildReadHoldingRegisterFrame({ unitId, register }) {
+function buildReadHoldingRegisterFrame({ unitId, register, mode = DEFAULT_TCP_CLIENT_MODBUS_MODE, transactionId }) {
+  const normalizedMode = getTcpClientModbusMode(mode);
+  if (normalizedMode === "modbus-tcp") {
+    const pdu = Buffer.alloc(5);
+    pdu[0] = 0x03;
+    pdu.writeUInt16BE(register, 1);
+    pdu.writeUInt16BE(1, 3);
+    return buildModbusTcpFrame({ transactionId, unitId, pdu });
+  }
+
   const body = Buffer.alloc(6);
   body[0] = unitId;
   body[1] = 0x03;
@@ -76,7 +123,22 @@ function buildReadHoldingRegisterFrame({ unitId, register }) {
   return appendCrc(body);
 }
 
-function buildWriteSingleRegisterFrame({ unitId, register, rawValue }) {
+function buildWriteSingleRegisterFrame({
+  unitId,
+  register,
+  rawValue,
+  mode = DEFAULT_TCP_CLIENT_MODBUS_MODE,
+  transactionId,
+}) {
+  const normalizedMode = getTcpClientModbusMode(mode);
+  if (normalizedMode === "modbus-tcp") {
+    const pdu = Buffer.alloc(5);
+    pdu[0] = 0x06;
+    pdu.writeUInt16BE(register, 1);
+    pdu.writeUInt16BE(toUnsigned16(rawValue), 3);
+    return buildModbusTcpFrame({ transactionId, unitId, pdu });
+  }
+
   const body = Buffer.alloc(6);
   body[0] = unitId;
   body[1] = 0x06;
@@ -85,7 +147,24 @@ function buildWriteSingleRegisterFrame({ unitId, register, rawValue }) {
   return appendCrc(body);
 }
 
-function buildWriteMultipleRegistersFrame({ unitId, register, rawValue }) {
+function buildWriteMultipleRegistersFrame({
+  unitId,
+  register,
+  rawValue,
+  mode = DEFAULT_TCP_CLIENT_MODBUS_MODE,
+  transactionId,
+}) {
+  const normalizedMode = getTcpClientModbusMode(mode);
+  if (normalizedMode === "modbus-tcp") {
+    const pdu = Buffer.alloc(8);
+    pdu[0] = 0x10;
+    pdu.writeUInt16BE(register, 1);
+    pdu.writeUInt16BE(1, 3);
+    pdu[5] = 2;
+    pdu.writeUInt16BE(toUnsigned16(rawValue), 6);
+    return buildModbusTcpFrame({ transactionId, unitId, pdu });
+  }
+
   const body = Buffer.alloc(9);
   body[0] = unitId;
   body[1] = 0x10;
@@ -96,8 +175,34 @@ function buildWriteMultipleRegistersFrame({ unitId, register, rawValue }) {
   return appendCrc(body);
 }
 
-function tryExtractResponseFrame(buffer, { unitId, functionCode }) {
+function tryExtractResponseFrame(buffer, { unitId, functionCode, mode = DEFAULT_TCP_CLIENT_MODBUS_MODE, transactionId }) {
   const response = Buffer.from(buffer ?? []);
+  const normalizedMode = getTcpClientModbusMode(mode);
+
+  if (normalizedMode === "modbus-tcp") {
+    for (let index = 0; index <= response.length - 9; index += 1) {
+      if (response.readUInt16BE(index + 2) !== 0) continue;
+      if (transactionId != null && response.readUInt16BE(index) !== transactionId) continue;
+
+      const length = response.readUInt16BE(index + 4);
+      const totalLength = 6 + length;
+      const frame = response.subarray(index, index + totalLength);
+      if (frame.length !== totalLength) return null;
+      if (frame[6] !== unitId) continue;
+
+      const receivedFunctionCode = frame[7];
+      if (receivedFunctionCode !== functionCode && receivedFunctionCode !== (functionCode | 0x80)) {
+        continue;
+      }
+
+      return {
+        frame: Buffer.from(frame),
+        consumedBytes: index + totalLength,
+      };
+    }
+
+    return null;
+  }
 
   for (let index = 0; index <= response.length - 5; index += 1) {
     if (response[index] !== unitId) continue;
@@ -130,26 +235,60 @@ function tryExtractResponseFrame(buffer, { unitId, functionCode }) {
   return null;
 }
 
-function assertNoModbusException(frame) {
-  if (!(frame[1] & 0x80)) return;
-  throw new Error(`Modbus exception ${frame[2]}`);
+function assertNoModbusException(frame, mode = DEFAULT_TCP_CLIENT_MODBUS_MODE) {
+  const normalizedMode = getTcpClientModbusMode(mode);
+  const functionCodeIndex = normalizedMode === "modbus-tcp" ? 7 : 1;
+  const exceptionCodeIndex = normalizedMode === "modbus-tcp" ? 8 : 2;
+
+  if (!(frame[functionCodeIndex] & 0x80)) return;
+  throw new Error(`Modbus exception ${frame[exceptionCodeIndex]}`);
 }
 
-async function sendFrameAndAwait({ elfinId, unitId, functionCode, frameBuffer }) {
+async function sendFrameAndAwait({
+  elfinId,
+  unitId,
+  functionCode,
+  frameBuffer,
+  mode = DEFAULT_TCP_CLIENT_MODBUS_MODE,
+  transactionId,
+}) {
   return sendTcpClientRawCommand(elfinId, frameBuffer, {
-    matcher: (buffer) => tryExtractResponseFrame(buffer, { unitId, functionCode }),
+    matcher: (buffer) =>
+      tryExtractResponseFrame(buffer, {
+        unitId,
+        functionCode,
+        mode,
+        transactionId,
+      }),
   });
 }
 
-async function readRawRegisterViaTcpClient({ elfinId, unitId, register }) {
-  const request = buildReadHoldingRegisterFrame({ unitId, register });
+async function readRawRegisterViaTcpClient({
+  elfinId,
+  unitId,
+  register,
+  modbusMode = DEFAULT_TCP_CLIENT_MODBUS_MODE,
+}) {
+  const mode = getTcpClientModbusMode(modbusMode);
+  const transactionId = mode === "modbus-tcp" ? allocateTransactionId() : undefined;
+  const request = buildReadHoldingRegisterFrame({ unitId, register, mode, transactionId });
   const response = await sendFrameAndAwait({
     elfinId,
     unitId,
     functionCode: 0x03,
     frameBuffer: request,
+    mode,
+    transactionId,
   });
-  assertNoModbusException(response);
+  assertNoModbusException(response, mode);
+
+  if (mode === "modbus-tcp") {
+    if (response[8] !== 2) {
+      throw new Error(`Respuesta Modbus TCP client inesperada para registro ${register}`);
+    }
+
+    return toSigned16(response.readUInt16BE(9));
+  }
 
   if (response[2] !== 2) {
     throw new Error(`Respuesta Modbus TCP client inesperada para registro ${register}`);
@@ -164,20 +303,26 @@ async function writeHoldingRegisterViaTcpClient({
   register,
   rawValue,
   functionCode = "auto",
+  modbusMode = DEFAULT_TCP_CLIENT_MODBUS_MODE,
 }) {
+  const mode = getTcpClientModbusMode(modbusMode);
+
   const sendWrite = async (resolvedFunctionCode) => {
     const numericFunctionCode = resolvedFunctionCode === "0x06" ? 0x06 : 0x10;
+    const transactionId = mode === "modbus-tcp" ? allocateTransactionId() : undefined;
     const request =
       numericFunctionCode === 0x06
-        ? buildWriteSingleRegisterFrame({ unitId, register, rawValue })
-        : buildWriteMultipleRegistersFrame({ unitId, register, rawValue });
+        ? buildWriteSingleRegisterFrame({ unitId, register, rawValue, mode, transactionId })
+        : buildWriteMultipleRegistersFrame({ unitId, register, rawValue, mode, transactionId });
     const response = await sendFrameAndAwait({
       elfinId,
       unitId,
       functionCode: numericFunctionCode,
       frameBuffer: request,
+      mode,
+      transactionId,
     });
-    assertNoModbusException(response);
+    assertNoModbusException(response, mode);
     return { functionCode: resolvedFunctionCode };
   };
 
@@ -193,10 +338,16 @@ async function writeHoldingRegisterViaTcpClient({
   }
 }
 
-export async function readRegistersSnapshotViaElfinTcpClient({ elfinId, unitId, registers = [] } = {}) {
+export async function readRegistersSnapshotViaElfinTcpClient({
+  elfinId,
+  unitId,
+  registers = [],
+  modbusMode = DEFAULT_TCP_CLIENT_MODBUS_MODE,
+} = {}) {
   const normalizedElfinId = String(elfinId ?? "").trim().toUpperCase();
   const numericUnitId = Number(unitId);
   const normalizedRegisters = [...new Set(registers.map(Number).filter(Number.isFinite))];
+  const mode = getTcpClientModbusMode(modbusMode);
 
   if (!normalizedElfinId) throw new Error("Falta elfinId para TCP Client");
   if (!Number.isFinite(numericUnitId) || numericUnitId < 1 || numericUnitId > 247) {
@@ -210,6 +361,7 @@ export async function readRegistersSnapshotViaElfinTcpClient({ elfinId, unitId, 
         elfinId: normalizedElfinId,
         unitId: numericUnitId,
         register,
+        modbusMode: mode,
       });
     }
     return snapshot;
@@ -229,6 +381,7 @@ export async function writeRegisterValueViaElfinTcpClient(
     dataType = "number",
     functionCode = "auto",
     debugLabel = null,
+    modbusMode = DEFAULT_TCP_CLIENT_MODBUS_MODE,
   } = {}
 ) {
   const numericValue = Number(value);
@@ -236,6 +389,7 @@ export async function writeRegisterValueViaElfinTcpClient(
   const numericRegister = Number(register);
   const numericVerifyRegister = Number(verifyRegister);
   const normalizedElfinId = String(elfinId ?? "").trim().toUpperCase();
+  const mode = getTcpClientModbusMode(modbusMode);
 
   if (!normalizedElfinId) throw new Error("Falta elfinId para TCP Client");
   if (!Number.isFinite(numericUnitId) || numericUnitId < 1 || numericUnitId > 247) {
@@ -256,6 +410,7 @@ export async function writeRegisterValueViaElfinTcpClient(
           elfinId: normalizedElfinId,
           unitId: numericUnitId,
           register: numericVerifyRegister,
+          modbusMode: mode,
         })
       : null;
 
@@ -275,6 +430,7 @@ export async function writeRegisterValueViaElfinTcpClient(
       register: numericRegister,
       rawValue,
       functionCode,
+      modbusMode: mode,
     });
 
     const rawAfterVerify = Number.isFinite(numericVerifyRegister)
@@ -282,6 +438,7 @@ export async function writeRegisterValueViaElfinTcpClient(
           elfinId: normalizedElfinId,
           unitId: numericUnitId,
           register: numericVerifyRegister,
+          modbusMode: mode,
         })
       : null;
     const normalizedAfter = dataType === "number" ? rawAfterVerify / scale : rawAfterVerify;
@@ -297,6 +454,7 @@ export async function writeRegisterValueViaElfinTcpClient(
       valueWritten: numericValue,
       valueAfterVerify: Number.isFinite(normalizedAfter) ? normalizedAfter : null,
       transport: "tcp-client",
+      modbusMode: mode,
       ...meta,
     };
   });
