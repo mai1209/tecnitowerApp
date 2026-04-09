@@ -102,6 +102,8 @@ function isIgnorableError(err) {
   return (
     msg.includes("connection timed out") ||
     msg.includes("timeout esperando respuesta tcp del elfin") ||
+    msg.includes("elfin tcp client no conectado") ||
+    msg.includes("elfin tcp client ocupado") ||
     msg.includes("modbus exception") ||
     msg.includes("socket hang up") ||
     msg.includes("econnrefused")
