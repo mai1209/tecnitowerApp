@@ -101,6 +101,7 @@ function isIgnorableError(err) {
   const msg = err?.message?.toLowerCase() || "";
   return (
     msg.includes("connection timed out") ||
+    msg.includes("timeout esperando respuesta tcp del elfin") ||
     msg.includes("modbus exception") ||
     msg.includes("socket hang up") ||
     msg.includes("econnrefused")

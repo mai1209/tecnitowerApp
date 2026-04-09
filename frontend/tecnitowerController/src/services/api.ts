@@ -39,6 +39,8 @@ export type ControllerPayload = {
   protocol?: string;
   connectionType?: string;
   unitId?: number;
+  probe1?: number;
+  probe2?: number;
   registerDefinitions?: RegisterDefinitionPayload[];
 };
 

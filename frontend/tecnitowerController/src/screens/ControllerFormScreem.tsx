@@ -33,6 +33,8 @@ function ControllerFormScreen({ navigation, session }: Props) {
   const [ipAddress, setIpAddress] = useState('');
   const [unitId, setUnitId] = useState('1');
   const [baudRate, setBaudRate] = useState('9600');
+  const [probe1, setProbe1] = useState('');
+  const [probe2, setProbe2] = useState('');
   const [models, setModels] = useState<any[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -61,6 +63,16 @@ function ControllerFormScreen({ navigation, session }: Props) {
     setDeviceBrand(model.brand ?? '');
     setUnitId(String(model.defaultUnitId ?? unitId));
     setBaudRate(String(model.defaultBaudRate ?? baudRate));
+    setProbe1(
+      model.defaultProbe1 != null
+        ? String(model.defaultProbe1)
+        : String(model.name?.toUpperCase?.() === 'TC900E LOG' ? 101 : 256)
+    );
+    setProbe2(
+      model.defaultProbe2 != null
+        ? String(model.defaultProbe2)
+        : String(model.name?.toUpperCase?.() === 'TC900E LOG' ? 102 : 258)
+    );
     setModalVisible(false);
   };
 
@@ -79,12 +91,22 @@ function ControllerFormScreen({ navigation, session }: Props) {
     }
     const parsedUnitId = parseOptionalNumber(unitId);
     const parsedBaudRate = parseOptionalNumber(baudRate);
+    const parsedProbe1 = parseOptionalNumber(probe1);
+    const parsedProbe2 = parseOptionalNumber(probe2);
     if (!parsedUnitId || parsedUnitId < 1 || parsedUnitId > 247) {
       setError('Unit ID debe estar entre 1 y 247.');
       return;
     }
     if (baudRate.trim() && !parsedBaudRate) {
       setError('Baud rate inválido.');
+      return;
+    }
+    if (probe1.trim() && (parsedProbe1 == null || parsedProbe1 < 0)) {
+      setError('Probe 1 inválida.');
+      return;
+    }
+    if (probe2.trim() && (parsedProbe2 == null || parsedProbe2 < 0)) {
+      setError('Probe 2 inválida.');
       return;
     }
     setIsSubmitting(true);
@@ -103,6 +125,8 @@ function ControllerFormScreen({ navigation, session }: Props) {
         ipAddress: ipAddress.trim() || undefined,
         unitId: parsedUnitId,
         baudRate: parsedBaudRate,
+        probe1: parsedProbe1,
+        probe2: parsedProbe2,
       }, session.token);
 
       Alert.alert('Éxito', 'Controlador registrado correctamente.');
@@ -259,6 +283,24 @@ function ControllerFormScreen({ navigation, session }: Props) {
                 value={baudRate}
                 onChangeText={setBaudRate}
                 placeholder="9600"
+                keyboardType="number-pad"
+              />
+
+              <InputField
+                label="Registro Probe 1"
+                icon={<Hash size={16} color="#64748B" />}
+                value={probe1}
+                onChangeText={setProbe1}
+                placeholder="101"
+                keyboardType="number-pad"
+              />
+
+              <InputField
+                label="Registro Probe 2"
+                icon={<Hash size={16} color="#64748B" />}
+                value={probe2}
+                onChangeText={setProbe2}
+                placeholder="102"
                 keyboardType="number-pad"
               />
 
