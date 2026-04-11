@@ -98,7 +98,7 @@ function tryRegisterElfin(state, chunk) {
     if (!looksLikeElfinId(rawPart)) continue;
     const normalized = canonicalizeElfinId(rawPart);
     attachConnection(normalized, state);
-    return true;
+    return { registered: true, remainder: Buffer.alloc(0) };
   }
 
   const immediateCandidate = state.identityBuffer.trim();
@@ -107,10 +107,25 @@ function tryRegisterElfin(state, chunk) {
   if (printableAscii && looksLikeElfinId(normalizedImmediate)) {
     attachConnection(normalizedImmediate, state);
     state.identityBuffer = "";
-    return true;
+    return { registered: true, remainder: Buffer.alloc(0) };
   }
 
-  return false;
+  // Si el chunk mezcla texto de registro + bytes binarios, intentamos
+  // extraer el ID ASCII del inicio y preservar el resto para el matcher.
+  const asciiPrefixMatch = state.identityBuffer.match(/^\s*(ELFIN|ID|MAC)\s*[:=]\s*([A-Za-z0-9._-]{8,})/i);
+  if (asciiPrefixMatch) {
+    const normalized = canonicalizeElfinId(`${asciiPrefixMatch[1]}:${asciiPrefixMatch[2]}`);
+    const consumedText = asciiPrefixMatch[0].length;
+    const trailingText = state.identityBuffer.slice(consumedText);
+    attachConnection(normalized, state);
+    state.identityBuffer = "";
+    return {
+      registered: true,
+      remainder: trailingText ? Buffer.from(trailingText, "utf8") : Buffer.alloc(0),
+    };
+  }
+
+  return { registered: false, remainder: Buffer.alloc(0) };
 }
 
 // ─── resolución de respuestas pendientes ───────────────────────────────────────
@@ -140,8 +155,15 @@ function handleSocketData(state, chunk) {
     });
   }
 
-  if (!state.elfinId && tryRegisterElfin(state, chunk)) {
-    return;
+  if (!state.elfinId) {
+    const registration = tryRegisterElfin(state, chunk);
+    if (registration.registered) {
+      if (registration.remainder?.length) {
+        state.buffer = Buffer.concat([state.buffer, registration.remainder]);
+        resolvePending(state);
+      }
+      return;
+    }
   }
 
   state.buffer = Buffer.concat([state.buffer, Buffer.from(chunk)]);
@@ -246,7 +268,11 @@ export function getTcpGatewayConnectionInfo(elfinId) {
 
 // ─── comando raw ───────────────────────────────────────────────────────────────
 
-export function sendTcpClientRawCommand(elfinId, frameBuffer, { matcher, timeoutMs } = {}) {
+export function sendTcpClientRawCommand(
+  elfinId,
+  frameBuffer,
+  { matcher, timeoutMs, clearBuffer = true } = {}
+) {
   const normalizedElfinId = getNormalizedElfinId(elfinId);
   const state = connections.get(normalizedElfinId);
 
@@ -272,7 +298,9 @@ export function sendTcpClientRawCommand(elfinId, frameBuffer, { matcher, timeout
     throw new Error("Trama TCP vacía");
   }
 
-  state.buffer = Buffer.alloc(0);
+  if (clearBuffer) {
+    state.buffer = Buffer.alloc(0);
+  }
 
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {

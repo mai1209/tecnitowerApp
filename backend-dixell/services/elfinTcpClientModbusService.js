@@ -252,12 +252,14 @@ async function sendFrameAndAwait({
   mode = DEFAULT_TCP_CLIENT_MODBUS_MODE,
   transactionId,
 }) {
+  const normalizedMode = getTcpClientModbusMode(mode);
   return sendTcpClientRawCommand(elfinId, frameBuffer, {
+    clearBuffer: normalizedMode !== "modbus-tcp",
     matcher: (buffer) =>
       tryExtractResponseFrame(buffer, {
         unitId,
         functionCode,
-        mode,
+        mode: normalizedMode,
         transactionId,
       }),
   });
