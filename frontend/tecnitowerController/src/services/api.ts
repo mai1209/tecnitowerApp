@@ -103,7 +103,7 @@ function normalizeApiBaseUrl(rawUrl?: string | null) {
 }
 
 const DEV_API_URL = resolveDevApiUrl();
-const CLOUD_API_URL = "https://site--tecnitower-backend--7cfp52tvdb25.code.run"; 
+const CLOUD_API_URL = "http://137.131.194.247:3001";
 const PROD_API_URL = normalizeApiBaseUrl(CLOUD_API_URL) || DEV_API_URL;
 
 export const DEFAULT_API_BASE_URL = __DEV__ ? DEV_API_URL : PROD_API_URL;

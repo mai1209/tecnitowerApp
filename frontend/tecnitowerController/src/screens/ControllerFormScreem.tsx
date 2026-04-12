@@ -24,9 +24,29 @@ type Props = {
   session: AuthSession;
 };
 
+function getRecommendedConnectionDefaults(model: any, fallback: { unitId: string; baudRate: string; probe1: string; probe2: string }) {
+  const normalizedName = String(model?.name ?? '').trim().toUpperCase();
+
+  if (normalizedName === 'TC900E LOG') {
+    return {
+      unitId: '1',
+      baudRate: '9600',
+      probe1: '101',
+      probe2: '102',
+    };
+  }
+
+  return {
+    unitId: String(model?.defaultUnitId ?? fallback.unitId),
+    baudRate: String(model?.defaultBaudRate ?? fallback.baudRate),
+    probe1: String(model?.defaultProbe1 ?? fallback.probe1),
+    probe2: String(model?.defaultProbe2 ?? fallback.probe2),
+  };
+}
+
 function ControllerFormScreen({ navigation, session }: Props) {
   const [name, setName] = useState('');
-  const [gatewayMode, setGatewayMode] = useState<'agent-mqtt' | 'elfin-mqtt' | 'tcp-client'>('tcp-client');
+  const gatewayMode = 'tcp-client' as const;
   const [deviceModel, setDeviceModel] = useState('');
   const [deviceBrand, setDeviceBrand] = useState('');
   const [elfinId, setElfinId] = useState('');
@@ -58,21 +78,20 @@ function ControllerFormScreen({ navigation, session }: Props) {
   }, []);
 
   const handleSelectModel = (model: any) => {
+    const recommended = getRecommendedConnectionDefaults(model, {
+      unitId,
+      baudRate,
+      probe1: probe1 || '101',
+      probe2: probe2 || '102',
+    });
+
     setSelectedModelId(model._id);
     setDeviceModel(model.name);
     setDeviceBrand(model.brand ?? '');
-    setUnitId(String(model.defaultUnitId ?? unitId));
-    setBaudRate(String(model.defaultBaudRate ?? baudRate));
-    setProbe1(
-      model.defaultProbe1 != null
-        ? String(model.defaultProbe1)
-        : String(model.name?.toUpperCase?.() === 'TC900E LOG' ? 101 : 256)
-    );
-    setProbe2(
-      model.defaultProbe2 != null
-        ? String(model.defaultProbe2)
-        : String(model.name?.toUpperCase?.() === 'TC900E LOG' ? 102 : 258)
-    );
+    setUnitId(recommended.unitId);
+    setBaudRate(recommended.baudRate);
+    setProbe1(recommended.probe1);
+    setProbe2(recommended.probe2);
     setModalVisible(false);
   };
 
@@ -84,8 +103,7 @@ function ControllerFormScreen({ navigation, session }: Props) {
   };
 
   const handleSubmit = async () => {
-    const requiresLocalIp = gatewayMode === 'agent-mqtt';
-    if (!name || !elfinId || (requiresLocalIp && !ipAddress)) {
+    if (!name || !elfinId) {
       setError('Por favor, completa todos los campos obligatorios.');
       return;
     }
@@ -190,65 +208,14 @@ function ControllerFormScreen({ navigation, session }: Props) {
 
               <Text style={styles.label}>Modo de conexión</Text>
               <View style={styles.modeSelector}>
-                <TouchableOpacity
-                  style={[
-                    styles.modeCard,
-                    gatewayMode === 'tcp-client' && styles.modeCardActive,
-                  ]}
-                  onPress={() => setGatewayMode('tcp-client')}
-                >
-                  <Text
-                    style={[
-                      styles.modeTitle,
-                      gatewayMode === 'tcp-client' && styles.modeTitleActive,
-                    ]}
-                  >
+                <View style={[styles.modeCard, styles.modeCardActive]}>
+                  <Text style={[styles.modeTitle, styles.modeTitleActive]}>
                     Elfin TCP Client
                   </Text>
                   <Text style={styles.modeDescription}>
-                    Recomendado si querés evitar Raspberry. El Elfin sale directo a un puerto TCP del servidor.
+                    Modo productivo validado. El Elfin se conecta directo al servidor Oracle en el puerto TCP 4001.
                   </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.modeCard,
-                    gatewayMode === 'agent-mqtt' && styles.modeCardActive,
-                  ]}
-                  onPress={() => setGatewayMode('agent-mqtt')}
-                >
-                  <Text
-                    style={[
-                      styles.modeTitle,
-                      gatewayMode === 'agent-mqtt' && styles.modeTitleActive,
-                    ]}
-                  >
-                    Gateway Local
-                  </Text>
-                  <Text style={styles.modeDescription}>
-                    Raspberry, mini PC o Mac conectada al mismo WiFi del Elfin.
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.modeCard,
-                    gatewayMode === 'elfin-mqtt' && styles.modeCardActive,
-                  ]}
-                  onPress={() => setGatewayMode('elfin-mqtt')}
-                >
-                  <Text
-                    style={[
-                      styles.modeTitle,
-                      gatewayMode === 'elfin-mqtt' && styles.modeTitleActive,
-                    ]}
-                  >
-                    Elfin MQTT Directo
-                  </Text>
-                  <Text style={styles.modeDescription}>
-                    Solo para gateways compatibles. Requiere configurar MQTT en el panel del Elfin.
-                  </Text>
-                </TouchableOpacity>
+                </View>
               </View>
 
               <InputField
@@ -257,15 +224,6 @@ function ControllerFormScreen({ navigation, session }: Props) {
                 value={elfinId}
                 onChangeText={setElfinId}
                 placeholder="ELF-XXXXXXX"
-              />
-
-              <InputField
-                label={gatewayMode === 'agent-mqtt' ? 'Dirección IP' : 'Dirección IP Local (opcional)'}
-                icon={<Globe size={16} color="#64748B" />}
-                value={ipAddress}
-                onChangeText={setIpAddress}
-                placeholder={gatewayMode === 'agent-mqtt' ? '192.168.1.XX' : 'Opcional si el gateway sale directo a la nube'}
-                keyboardType="numbers-and-punctuation"
               />
 
               <InputField
@@ -283,24 +241,6 @@ function ControllerFormScreen({ navigation, session }: Props) {
                 value={baudRate}
                 onChangeText={setBaudRate}
                 placeholder="9600"
-                keyboardType="number-pad"
-              />
-
-              <InputField
-                label="Registro Probe 1"
-                icon={<Hash size={16} color="#64748B" />}
-                value={probe1}
-                onChangeText={setProbe1}
-                placeholder="101"
-                keyboardType="number-pad"
-              />
-
-              <InputField
-                label="Registro Probe 2"
-                icon={<Hash size={16} color="#64748B" />}
-                value={probe2}
-                onChangeText={setProbe2}
-                placeholder="102"
                 keyboardType="number-pad"
               />
 

@@ -1,197 +1,272 @@
-# Manual de Configuración del Gateway
+# Manual Tecnico: Elfin TCP Client + Oracle
 
-Este manual cubre dos formas de instalar Tecnitower:
+Este manual deja una instalacion en el modo productivo validado:
 
-1. **Gateway Local Tecnitower**: Raspberry, mini PC o Mac local.
-2. **Gateway MQTT Directo Compatible**: para hardware que soporte MQTT bidireccional real.
+```text
+App movil
+  -> Backend Oracle
+  -> TCP Gateway Oracle:4001
+  -> Elfin EW11A en TCP Client
+  -> Controlador por RS485 Modbus
+```
+
+## 1. Datos que define el tecnico
+
+Antes de empezar, el tecnico tiene que tener estos datos:
+
+- WiFi del local: `SSID` y clave
+- IP publica del backend Oracle: `137.131.194.247`
+- Puerto TCP del gateway: `4001`
+- `elfinId` unico del equipo
+- `unitId` del controlador
+- `baud rate` del controlador
+- registros reales del modelo:
+  - `probe1`
+  - `probe2`
+  - `setpoint`
+
+Para el caso validado de `TC900E LOG`:
+
+- `unitId = 1`
+- `baud = 9600`
+- `probe1 = 101`
+- `probe2 = 102`
+- `setpoint = 31`
 
 ---
 
-## Opcion 1. Gateway Local Tecnitower
+## 2. Configurar WiFi del Elfin
 
-### Cuando usarla
-
-Usar esta opcion si el cliente ya tiene un Elfin EW11A o un gateway local que funcione bien por Modbus TCP local.
-
-Es la opcion recomendada para primeras instalaciones.
-
-### Flujo
+Conectarse al hotspot del Elfin y abrir:
 
 ```text
-App
-  -> Backend cloud
-  -> EMQX MQTT
-  -> Gateway local Tecnitower
-  -> Elfin local por IP y puerto 502
-  -> TC900E por RS485
+http://10.10.100.254
 ```
 
-### 1. Configurar el controlador en la app
+Credenciales por defecto:
 
-Al registrar el controlador:
+- usuario: `admin`
+- clave: `admin`
 
-- **Modo de conexion**: `Gateway Local`
-- **ID Elfin**: serial o identificador del gateway local
-- **IP local**: IP del Elfin en la red del cliente
-- **Unit ID**: normalmente `1`
-- **Baud rate**: `9600`
+En `System Settings`:
 
-### 2. Configurar el Elfin
+- WiFi Mode: `STA`
+- STA SSID: WiFi del local
+- STA KEY: clave del WiFi
 
-#### WiFi
+Guardar con `Submit` y reiniciar el equipo.
 
-- Modo: `STA`
-- SSID: WiFi del local
-- Password: clave del WiFi
+---
 
-#### Serial / UART
+## 3. Configurar RS485 del Elfin
 
-- Baudrate: `9600`
-- Databits: `8`
-- Stopbits: `1`
-- Parity: `NONE`
-- UartProto: `Modbus`
+En `Serial Port Settings` dejar:
 
-#### Socket
+- Baud Rate: `9600`
+- Data Bit: `8`
+- Stop Bit: `1`
+- Parity: `None`
+- Protocol: `Modbus`
+
+Si el controlador usa otros valores, aca se cargan los reales del equipo instalado.
+
+---
+
+## 4. Configurar TCP Client del Elfin
+
+En `Communication Settings` dejar:
+
+### Basic Settings
 
 - Name: `netp`
-- Protocol: `TCP-SERVER`
-- Port: `502`
+- Protocol: `TCP-CLIENT`
+
+### Socket Settings
+
+- Server: `137.131.194.247`
+- Server Port: `4001`
+- Local Port: `0`
+- Buffer Size: `512`
+- Keep Alive: `60`
+- Timeout: `0`
+
+### Protocol Settings
+
+- Connect Mode: `Always`
+- Register Mode: `Link`
+- Register Code: `ELFIN:<elfinId>`
+- Heart Beat: `OFF`
+
+Ejemplo:
+
+```text
+Register Code = ELFIN:2018DP1893
+```
+
+### More Settings
+
 - Security: `Disable`
-- Route: `uart`
-- Connect Mode: `Always`
+- Route: `Uart`
 
-### 3. Configurar el controlador Dixell
-
-- Protocolo: `Modb`
-- Unit ID / F24: `1`
-- Baud rate: `9600`
-
-### 4. Configurar el gateway local Tecnitower
-
-En la Raspberry, mini PC o Mac local, crear `.env` con:
-
-```env
-MQTT_URL=mqtts://TU_BROKER:8883
-MQTT_USERNAME=TU_USUARIO
-MQTT_PASSWORD=TU_PASSWORD
-LOCAL_AGENT_MQTT_CLIENT_ID=tecnitower-agent-2018DP1893
-LOCAL_AGENT_ELFIN_ID=2018DP1893
-LOCAL_AGENT_MODBUS_HOST=192.168.100.55
-LOCAL_AGENT_MODBUS_PORT=502
-LOCAL_AGENT_UNIT_ID=1
-MODBUS_TIMEOUT_MS=1500
-```
-
-Levantar el agente:
-
-```bash
-npm run agent:local
-```
-
-En produccion debe quedar como servicio automatico.
-
-### 5. Validacion
-
-Validar primero que el Elfin responda en la red local:
-
-```bash
-nc -vz -w 3 192.168.100.55 502
-```
-
-Validar lectura Modbus:
-
-```bash
-node --input-type=module -e "import ModbusRTU from 'modbus-serial'; const c=new ModbusRTU(); try{await c.connectTCP('192.168.100.55',{port:502}); c.setID(1); c.setTimeout(3000); const res=await c.readHoldingRegisters(31,1); console.log(res.data[0]);}catch(e){console.error(e.message||String(e));} finally{try{c.close();}catch{}}"
-```
-
-Si esto funciona, la app deberia poder leer y escribir.
+Guardar con `Submit` y reiniciar el Elfin.
 
 ---
 
-## Opcion 2. Gateway MQTT Directo Compatible
+## 5. Configurar el controlador
 
-### Cuando usarla
+En el controlador RS485 hay que confirmar como minimo:
 
-Usar esta opcion solo si el gateway fue validado para:
+- protocolo serial en Modbus
+- `unitId` correcto
+- `baud` correcto
 
-- MQTT bidireccional real
-- request/response Modbus por MQTT
-- TLS moderno si usa broker cloud seguro
+Para `TC900E LOG`, la instalacion validada fue:
 
-### Flujo
+- `F24 = 1`
+- `baud = 9600`
+- `Prot = Modb`
 
-```text
-App
-  -> Backend cloud
-  -> EMQX MQTT
-  -> Gateway MQTT directo compatible
-  -> TC900E
-```
-
-### 1. Configurar el controlador en la app
-
-Al registrar el controlador:
-
-- **Modo de conexion**: `Elfin MQTT Directo`
-- **ID Elfin**: serial o identificador MQTT del gateway
-- **IP local**: opcional
-- **Unit ID**: normalmente `1`
-- **Baud rate**: `9600`
-
-### 2. Configurar el panel del gateway
-
-En `socket.html` o panel equivalente:
-
-- Protocol: `MQTT`
-- Server: endpoint del broker MQTT
-- Port: `8883` o `1883` segun el caso
-- Security: `TLS` o `Disable`
-- MQTT Client ID: identificador unico del gateway
-- MQTT User: usuario del broker
-- MQTT Password: clave del broker
-- Subscribe Topic: `tecnitower/elfins/<elfinId>/tx`
-- Publish Topic: `tecnitower/elfins/<elfinId>/rx`
-- Route: `uart`
-- Connect Mode: `Always`
-
-### 3. Configurar el controlador Dixell
-
-- Protocolo: `Modb`
-- Unit ID / F24: `1`
-- Baud rate: `9600`
-
-### 4. Configurar el backend cloud
-
-En el backend:
-
-```env
-CONTROL_TRANSPORT=elfin-mqtt
-MQTT_URL=mqtts://TU_BROKER:8883
-MQTT_USERNAME=TU_USUARIO
-MQTT_PASSWORD=TU_PASSWORD
-MQTT_RAW_COMMAND_TOPIC_SUFFIX=tx
-MQTT_RAW_RESPONSE_TOPIC_SUFFIX=rx
-```
-
-### 5. Advertencia
-
-Esta opcion queda como **experimental** hasta validar el modelo exacto del gateway.
-
-Si no hay respuesta por MQTT `rx`, la instalacion debe volver al camino del **Gateway Local Tecnitower**.
+Si el Elfin recibe por TCP y transmite por UART, pero `UART RecvBytes` queda en `0`, el problema no esta en Oracle: hay que revisar protocolo, direccion o cableado RS485 del controlador.
 
 ---
 
-## Recomendacion final
+## 6. Alta del controlador en la app
 
-Para clientes nuevos y primeras instalaciones:
+En `Nuevo Controlador`, cargar:
 
-```text
-Recomendado: Gateway Local Tecnitower
+- nombre del equipo
+- modelo de hardware
+- `elfinId`
+- `unitId`
+- `baud rate`
+- `probe1`
+- `probe2`
+
+Notas:
+
+- el modo visual de alta queda fijo en `Elfin TCP Client`
+- la IP local del Elfin es opcional y solo sirve para soporte o acceso al panel local
+- los valores reales que usa el backend son los del controlador guardado, no los defaults del modelo base
+
+---
+
+## 7. Configuracion de Oracle
+
+En el backend Oracle, el `.env` debe quedar con:
+
+```env
+CONTROL_TRANSPORT=tcp-client
+TCP_GATEWAY_HOST=0.0.0.0
+TCP_GATEWAY_PORT=4001
+TCP_GATEWAY_TIMEOUT_MS=12000
+TCP_CLIENT_MODBUS_MODE=modbus-tcp
 ```
 
-Para hardware MQTT directo ya probado:
+Durante validacion tecnica se puede activar:
+
+```env
+DEBUG_TCP_GATEWAY=1
+```
+
+En produccion conviene dejar:
+
+```env
+DEBUG_TCP_GATEWAY=0
+```
+
+---
+
+## 8. Comandos de soporte Oracle
+
+Entrar por SSH:
+
+```bash
+ssh -i /Users/maidev/Desktop/Codex/ssh-key-2026-04-09.key ubuntu@137.131.194.247
+```
+
+Editar `.env`:
+
+```bash
+cd ~/tecnitowerApp/backend-dixell
+nano .env
+```
+
+Actualizar y reiniciar backend:
+
+```bash
+cd ~/tecnitowerApp
+git pull origin main
+sudo systemctl restart tecnitower-backend
+sudo systemctl status tecnitower-backend --no-pager
+```
+
+Ver logs en vivo:
+
+```bash
+sudo journalctl -u tecnitower-backend -f
+```
+
+---
+
+## 9. Validacion tecnica
+
+### Desde la Mac o notebook del tecnico
+
+Verificar backend Oracle:
+
+```bash
+curl http://137.131.194.247:3001/api/health
+nc -vz -w 3 137.131.194.247 4001
+```
+
+### En logs de Oracle
+
+Deberia verse:
+
+- conexion entrante
+- registro del Elfin con `ELFIN:<id>`
+- tramas `tx`
+- tramas `rx`
+
+Ejemplo esperado:
 
 ```text
-Opcional: Gateway MQTT Directo Compatible
+[TCP GATEWAY 2018DP1893] tx 12 bytes ...
+[TCP GATEWAY 2018DP1893] rx 11 bytes ...
 ```
+
+### Verificacion local del panel del Elfin
+
+Consultar estado:
+
+```bash
+curl --max-time 10 -u admin:admin \
+  http://IP_DEL_ELFIN/cmd \
+  -H 'Content-Type: application/json; charset=utf-8' \
+  --data 'msg={"CID":10001,"PL":["SOCK","UART"]}'
+```
+
+Si funciona correctamente:
+
+- `SOCK State` debe quedar en `Connected`
+- `RecvBytes` y `SendBytes` deben crecer
+
+---
+
+## 10. Regla de instalacion
+
+Para nuevas instalaciones, el socket cloud del Elfin puede repetirse siempre:
+
+- Server: `137.131.194.247`
+- Port: `4001`
+- Connect Mode: `Always`
+- Register Mode: `Link`
+
+Lo que cambia por cliente es:
+
+- WiFi del local
+- `elfinId` unico
+- configuracion serial del controlador
+- registros reales del modelo
+
+El `elfinId` no debe repetirse entre clientes.

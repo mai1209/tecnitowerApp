@@ -1,72 +1,73 @@
-# Opciones de Implementacion para Cliente
+# Opcion recomendada para cliente
 
-## Opcion 1. Gateway Local Tecnitower
-
-```text
-App
-  -> Backend cloud
-  -> EMQX MQTT
-  -> Gateway local Tecnitower (Raspberry / mini PC / Mac de demo)
-  -> Elfin local por 192.168.x.x:502
-  -> TC900E
-```
-
-### Que necesita el cliente
-
-- Elfin actual conectado al TC900E por RS485.
-- Una Raspberry, mini PC o equipo local que quede encendido.
-- WiFi o red local para que el gateway local llegue al Elfin.
-
-### Ventajas
-
-- Es la opcion recomendada y validada.
-- Reutiliza el Elfin actual.
-- No expone Modbus directo a internet.
-- Permite presentar y operar mas rapido.
-
-### Configuracion local
-
-- En la app: `Gateway Local`
-- En el Elfin: `TCP-SERVER`, puerto `502`, `Route: uart`, serial `9600 8N1 Modbus`
-- En la Raspberry/mini PC: agente local conectado a EMQX
-
-## Opcion 2. Gateway MQTT directo compatible
+## Camino validado
 
 ```text
 App
-  -> Backend cloud
-  -> EMQX MQTT
-  -> Gateway MQTT directo compatible
-  -> TC900E
+  -> Backend Oracle
+  -> TCP Gateway Oracle:4001
+  -> Elfin EW11A en TCP Client
+  -> TC900E por RS485 Modbus
 ```
 
-### Que necesita el cliente
+## Que necesita el cliente
 
-- Un gateway que soporte MQTT bidireccional real.
-- Soporte de TLS moderno si va a usar broker cloud con `8883`.
-- Topics MQTT configurables.
+- Elfin conectado al controlador por RS485
+- WiFi 2.4 GHz en el local
+- configuracion del panel del Elfin
+- alta del controlador en la app con el mismo `elfinId`
 
-### Ventajas
+## Ventajas
 
-- Menos componentes en la instalacion.
-- Arquitectura mas limpia.
+- no requiere Raspberry ni mini PC local
+- no requiere gateway local prendido
+- una sola configuracion cloud para todas las instalaciones
+- Oracle identifica cada equipo por `Register Code / elfinId`
 
-### Riesgo actual
+## Configuracion del Elfin
 
-- En el EW11A probado no quedo validado el modo MQTT directo.
-- Por eso esta opcion debe considerarse solo con hardware compatible ya probado.
+### Serial
 
-### Configuracion local
+```text
+Baud Rate: 9600
+Data Bit: 8
+Stop Bit: 1
+Parity: None
+Protocol: Modbus
+```
 
-- En la app: `Elfin MQTT Directo`
-- En el panel del gateway: configurar broker MQTT, usuario, password, topics, seguridad y ruta UART
+### Communication Settings
+
+```text
+Name: netp
+Protocol: TCP-CLIENT
+Server: 137.131.194.247
+Server Port: 4001
+Local Port: 0
+Buffer Size: 512
+Keep Alive: 60
+Timeout: 0
+Connect Mode: Always
+Register Mode: Link
+Register Code: ELFIN:<elfinId_unico>
+Heart Beat: OFF
+Security: Disable
+Route: Uart
+```
+
+## Configuracion del controlador
+
+Para `TC900E LOG`:
+
+```text
+Prot: Modb
+F24: 1
+Baud: 9600
+Probe 1: 101
+Probe 2: 102
+Setpoint: 31
+```
 
 ## Recomendacion
 
-La recomendacion para presentacion, MVP y primeras instalaciones es:
-
-```text
-Opcion 1: Gateway Local Tecnitower
-```
-
-La opcion 2 conviene dejarla para gateways directos que ya hayan sido validados en campo.
+Para instalaciones nuevas, este es el unico camino recomendado.
