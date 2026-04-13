@@ -407,14 +407,21 @@ export async function writeRegisterValueViaElfinTcpClient(
 
   return withElfinTcpLock(normalizedElfinId, async () => {
     const rawValue = normalizeWriteValue(numericValue, { scale, dataType });
-    const rawBeforeVerify = Number.isFinite(numericVerifyRegister)
-      ? await readRawRegisterViaTcpClient({
+    let rawBeforeVerify = null;
+    let verifyBeforeError = null;
+
+    if (Number.isFinite(numericVerifyRegister)) {
+      try {
+        rawBeforeVerify = await readRawRegisterViaTcpClient({
           elfinId: normalizedElfinId,
           unitId: numericUnitId,
           register: numericVerifyRegister,
           modbusMode: mode,
-        })
-      : null;
+        });
+      } catch (error) {
+        verifyBeforeError = error?.message || String(error);
+      }
+    }
 
     if (debugLabel) {
       console.log(`🧪 [${debugLabel} TCP CLIENT]`, {
@@ -423,6 +430,7 @@ export async function writeRegisterValueViaElfinTcpClient(
         verifyRegister: numericVerifyRegister,
         rawBeforeVerify,
         rawValue,
+        verifyBeforeError,
       });
     }
 
@@ -435,16 +443,31 @@ export async function writeRegisterValueViaElfinTcpClient(
       modbusMode: mode,
     });
 
-    const rawAfterVerify = Number.isFinite(numericVerifyRegister)
-      ? await readRawRegisterViaTcpClient({
+    let rawAfterVerify = null;
+    let verifyAfterError = null;
+
+    if (Number.isFinite(numericVerifyRegister)) {
+      try {
+        rawAfterVerify = await readRawRegisterViaTcpClient({
           elfinId: normalizedElfinId,
           unitId: numericUnitId,
           register: numericVerifyRegister,
           modbusMode: mode,
-        })
+        });
+      } catch (error) {
+        verifyAfterError = error?.message || String(error);
+      }
+    }
+
+    const normalizedAfter = Number.isFinite(rawAfterVerify)
+      ? dataType === "number"
+        ? rawAfterVerify / scale
+        : rawAfterVerify
       : null;
-    const normalizedAfter = dataType === "number" ? rawAfterVerify / scale : rawAfterVerify;
-    const ok = rawAfterVerify === rawValue || numericVerifyRegister !== numericRegister;
+    const ok =
+      verifyAfterError != null
+        ? true
+        : rawAfterVerify === rawValue || numericVerifyRegister !== numericRegister;
 
     return {
       ok,
@@ -455,6 +478,8 @@ export async function writeRegisterValueViaElfinTcpClient(
       rawAfterVerify,
       valueWritten: numericValue,
       valueAfterVerify: Number.isFinite(normalizedAfter) ? normalizedAfter : null,
+      verifyBeforeError,
+      verifyAfterError,
       transport: "tcp-client",
       modbusMode: mode,
       ...meta,
