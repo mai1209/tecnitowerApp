@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
+  Alert,
   StyleSheet,
   View,
   Text,
@@ -9,9 +10,9 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AppLayout from '../layouts/AppLayout';
-import { fetchControllers } from '../services/api';
+import { deleteController, fetchControllers } from '../services/api';
 import { AuthSession } from '../types/auth';
-import { SkipForward } from 'lucide-react-native';
+import { SkipForward, Trash2 } from 'lucide-react-native';
 
 type Props = {
   navigation: any;
@@ -22,6 +23,7 @@ type Props = {
 function HomeScreen({ navigation, session, onLogout }: Props) {
   const [controllers, setControllers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   useFocusEffect(
@@ -62,6 +64,38 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
       };
     }, [session?.token]),
   );
+
+  const handleDeleteController = useCallback((controller: any) => {
+    if (!session?.token || deletingId) return;
+
+    Alert.alert(
+      'Eliminar controlador',
+      `Se va a eliminar "${controller?.name ?? 'este controlador'}". Esta acción no se puede deshacer.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeletingId(String(controller._id));
+              setError('');
+              await deleteController(String(controller._id), session.token);
+              setControllers((current) => current.filter((item) => item._id !== controller._id));
+            } catch (err) {
+              setError(
+                err instanceof Error
+                  ? err.message
+                  : 'No se pudo eliminar el controlador',
+              );
+            } finally {
+              setDeletingId(null);
+            }
+          },
+        },
+      ],
+    );
+  }, [deletingId, session?.token]);
 
   return (
     <AppLayout navigation={navigation} onLogout={onLogout}>
@@ -104,28 +138,41 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
         )}
 
         {controllers.map(ctrl => (
-          <TouchableOpacity
-            key={ctrl._id}
-            style={styles.card}
-            onPress={() =>
-              navigation.navigate('ControllerLive', {
-                controller: ctrl,
-              })
-            }
-          >
-            <View style={styles.cardCopy}>
-              <Text style={styles.cardTitle}>{ctrl.name}</Text>
-              <Text style={styles.cardBadge}>
-                {ctrl.deviceBrand || ctrl.deviceModel || ctrl.dixellModel
-                  ? [ctrl.deviceBrand, ctrl.deviceModel || ctrl.dixellModel].filter(Boolean).join(' · ')
-                  : 'SIN MODELO'}
-              </Text>
-            </View>
+          <View key={ctrl._id} style={styles.card}>
+            <TouchableOpacity
+              style={styles.cardMainAction}
+              onPress={() =>
+                navigation.navigate('ControllerLive', {
+                  controller: ctrl,
+                })
+              }
+            >
+              <View style={styles.cardCopy}>
+                <Text style={styles.cardTitle}>{ctrl.name}</Text>
+                <Text style={styles.cardBadge}>
+                  {ctrl.deviceBrand || ctrl.deviceModel || ctrl.dixellModel
+                    ? [ctrl.deviceBrand, ctrl.deviceModel || ctrl.dixellModel].filter(Boolean).join(' · ')
+                    : 'SIN MODELO'}
+                </Text>
+              </View>
 
-            <View style={styles.arrowBadge}>
-              <SkipForward color="#0F172A" strokeWidth={2} size={18} />
-            </View>
-          </TouchableOpacity>
+              <View style={styles.arrowBadge}>
+                <SkipForward color="#0F172A" strokeWidth={2} size={18} />
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.deleteBadge, deletingId === ctrl._id && styles.deleteBadgeDisabled]}
+              onPress={() => handleDeleteController(ctrl)}
+              disabled={deletingId === ctrl._id}
+            >
+              {deletingId === ctrl._id ? (
+                <ActivityIndicator size="small" color="#991B1B" />
+              ) : (
+                <Trash2 color="#991B1B" strokeWidth={2} size={18} />
+              )}
+            </TouchableOpacity>
+          </View>
         ))}
       </ScrollView>
     </AppLayout>
@@ -188,12 +235,17 @@ const styles = StyleSheet.create({
     borderColor: '#D6E3F3',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     shadowColor: '#0F172A',
     shadowOpacity: 0.04,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 8 },
     elevation: 2,
+  },
+  cardMainAction: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   cardCopy: {
     flex: 1,
@@ -222,6 +274,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 12,
+  },
+  deleteBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
+  },
+  deleteBadgeDisabled: {
+    opacity: 0.7,
   },
   emptyCard: {
     backgroundColor: '#FFFFFF',

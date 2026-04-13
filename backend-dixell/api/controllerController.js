@@ -474,6 +474,31 @@ export const listControllers = async (req, res) => {
   }
 };
 
+export const deleteController = async (req, res) => {
+  try {
+    const controller = await findOwnedController(req.params.id, req.user?.id);
+    if (!controller) {
+      return res.status(404).json({ error: "Controlador no encontrado" });
+    }
+
+    const deleted = {
+      _id: controller._id.toString(),
+      name: controller.name,
+      elfinId: controller.elfinId,
+    };
+
+    await controller.deleteOne();
+
+    return res.json({
+      message: "Controlador eliminado correctamente",
+      controller: deleted,
+    });
+  } catch (error) {
+    console.error("❌ [DELETE CONTROLLER ERROR]:", error?.message || error);
+    return res.status(500).json({ error: "Error eliminando controlador" });
+  }
+};
+
 export const getController = async (req, res) => {
   try {
     const controller = await findOwnedController(req.params.id, req.user?.id).lean();

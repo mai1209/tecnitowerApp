@@ -7,6 +7,7 @@ type RequestOptions = {
   body?: unknown;
   signal?: AbortSignal;
   authToken?: string;
+  timeoutMs?: number;
 };
 
 // Tipos de payload (definidos igual que antes)
@@ -19,6 +20,10 @@ export type RegisterPayload = {
 export type LoginPayload = {
   email: string;
   password: string;
+};
+
+export type PasswordRecoveryPayload = {
+  email: string;
 };
 
 export type ControllerPayload = {
@@ -144,7 +149,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   // Añadimos un AbortController por si la conexión se queda colgada
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 segundos máximo
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    Number.isFinite(options.timeoutMs) && (options.timeoutMs ?? 0) > 0 ? Number(options.timeoutMs) : 10000
+  );
 
   try {
     const response = await fetch(url, {
@@ -192,8 +200,23 @@ export function loginUser(payload: LoginPayload) {
   return request<{ token: string; user: any }>("/api/auth/login", { method: "POST", body: payload });
 }
 
+export function requestPasswordRecovery(payload: PasswordRecoveryPayload) {
+  return request<{ message: string }>("/api/auth/forgot-password", {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export function createController(payload: ControllerPayload, authToken: string) {
   return request<{ controller: any }>("/api/controllers", { method: "POST", body: payload, authToken });
+}
+
+export function deleteController(controllerId: string, authToken: string) {
+  return request<{ message: string; controller: any }>(`/api/controllers/${controllerId}`, {
+    method: "DELETE",
+    authToken,
+    timeoutMs: 15000,
+  });
 }
 
 export function fetchControllers(authToken: string) {
@@ -218,6 +241,7 @@ export function updateControllerSetpoint(controllerId: string, temperature: numb
     method: "POST",
     body: { temperature },
     authToken,
+    timeoutMs: 20000,
   });
 }
 
@@ -289,6 +313,7 @@ export function writeControllerRegister(
     method: "POST",
     body: payload,
     authToken,
+    timeoutMs: 20000,
   });
 }
 
@@ -309,6 +334,7 @@ export function updateControllerHy(controllerId: string, value: number, authToke
     method: "POST",
     body: { value },
     authToken,
+    timeoutMs: 20000,
   });
 }
 
@@ -317,6 +343,7 @@ export function updateControllerUs(controllerId: string, value: number, authToke
     method: "POST",
     body: { value },
     authToken,
+    timeoutMs: 20000,
   });
 }
 
@@ -325,6 +352,7 @@ export function updateControllerSetpoint768(controllerId: string, value: number,
     method: "POST",
     body: { value },
     authToken,
+    timeoutMs: 20000,
   });
 }
 
@@ -334,5 +362,6 @@ export function updateControllerLs(controllerId: string, value: number, authToke
     method: "POST",
     body: { value },
     authToken,
+    timeoutMs: 20000,
   });
 }

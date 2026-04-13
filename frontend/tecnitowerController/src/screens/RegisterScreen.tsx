@@ -13,10 +13,12 @@ import {
   Keyboard,
   Alert,
   ActivityIndicator,
+  SafeAreaView,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 
 import { registerUser } from '../services/api';
+import PasswordField from '../components/PasswordField';
 
 type Props = {
   navigation: {
@@ -29,6 +31,8 @@ function RegisterScreen({ navigation }: Props) {
   const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -42,6 +46,11 @@ function RegisterScreen({ navigation }: Props) {
 
     if (password !== confirmPassword) {
       setErrorMessage('Las contraseñas no coinciden.');
+      return;
+    }
+
+    if (password.length < 8) {
+      setErrorMessage('La contraseña debe tener al menos 8 caracteres.');
       return;
     }
 
@@ -66,7 +75,8 @@ function RegisterScreen({ navigation }: Props) {
       setPassword('');
       setConfirmPassword('');
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'No se pudo completar el registro.';
+      const message =
+        err instanceof Error ? err.message : 'No se pudo completar el registro.';
       setErrorMessage(message);
     } finally {
       setIsSubmitting(false);
@@ -75,107 +85,157 @@ function RegisterScreen({ navigation }: Props) {
 
   return (
     <LinearGradient
-      colors={['#F2F2F2', '#E6EAF4', '#001F7C']}
-      start={{ x: 0.5, y: 0 }}
-      end={{ x: 0.5, y: 1 }}
-      style={styles.container}
+      colors={['#F8FAFC', '#E8EEF9', '#C9D6F2']}
+      start={{ x: 0.3, y: 0 }}
+      end={{ x: 0.8, y: 1 }}
+      style={styles.screen}
     >
-      <KeyboardAvoidingView
-        style={styles.keyboardAvoider}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.content}>
-              <Image
-                source={require('../../assets/logo.png')}
-                style={styles.logo}
-              />
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView
+          style={styles.keyboardAvoider}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.wrapper}>
+                <View style={styles.topBrandBlock}>
+                  <View style={styles.logoShell}>
+                    <Image
+                      source={require('../../assets/logo.png')}
+                      style={styles.logo}
+                    />
+                  </View>
 
-              <Text style={styles.title}>TECNITOWER S.A</Text>
-              <Text style={styles.subtitle}>Registrarme</Text>
-              <View style={styles.containerInput}>
-                <View>
-                  <Text style={styles.label}>E-mail</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={email}
-                    placeholder="correo@correo.com"
-                    placeholderTextColor="#9CA3AF"
-                    onChangeText={setEmail}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
+                  <Text style={styles.brand}>TECNITOWER S.A</Text>
+                  <Text style={styles.welcomeTitle}>Crear cuenta</Text>
+                  <Text style={styles.welcomeSubtitle}>
+                    Registrá tu usuario para comenzar a operar y monitorear tus equipos.
+                  </Text>
                 </View>
 
-                <View>
-                  <Text style={styles.label}>Usuario/Empresa</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={fullName}
-                    placeholder="Usuario/Empresa"
-                    placeholderTextColor="#9CA3AF"
-                    onChangeText={setFullName}
-                  />
-                </View>
-                <View>
-                  <Text style={styles.label}>Contraseña</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={password}
-                    placeholder="Contraseña"
-                    placeholderTextColor="#9CA3AF"
-                    onChangeText={setPassword}
-                    secureTextEntry
-                  />
-                </View>
-                <View>
-                  <Text style={styles.label}>Repetir contraseña</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={confirmPassword}
-                    placeholder="Repetir contraseña"
-                    placeholderTextColor="#9CA3AF"
-                    onChangeText={setConfirmPassword}
-                    secureTextEntry
-                  />
-                </View>
-                {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
-                <TouchableOpacity
-                  style={styles.button}
-                  onPress={handleRegister}
-                  activeOpacity={0.8}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <ActivityIndicator color="#FFF" />
-                  ) : (
-                    <Text style={styles.buttonText}>Registrarse</Text>
+                <View style={styles.card}>
+                  <Text style={styles.cardTitle}>Registro</Text>
+                  <Text style={styles.cardSubtitle}>
+                    Completá los datos para dar de alta tu cuenta.
+                  </Text>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Correo electrónico</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={email}
+                      placeholder="correo@correo.com"
+                      placeholderTextColor="#94A3B8"
+                      onChangeText={(value) => {
+                        setEmail(value);
+                        if (errorMessage) setErrorMessage('');
+                      }}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.label}>Usuario / Empresa</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={fullName}
+                      placeholder="Usuario o empresa"
+                      placeholderTextColor="#94A3B8"
+                      onChangeText={(value) => {
+                        setFullName(value);
+                        if (errorMessage) setErrorMessage('');
+                      }}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <PasswordField
+                      label="Contraseña"
+                      value={password}
+                      placeholder="Ingresa tu contraseña"
+                      visible={passwordVisible}
+                      onChangeText={(value) => {
+                        setPassword(value);
+                        if (errorMessage) setErrorMessage('');
+                      }}
+                      onToggleVisibility={() =>
+                        setPasswordVisible((current) => !current)
+                      }
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <PasswordField
+                      label="Repetir contraseña"
+                      value={confirmPassword}
+                      placeholder="Repite tu contraseña"
+                      visible={confirmPasswordVisible}
+                      onChangeText={(value) => {
+                        setConfirmPassword(value);
+                        if (errorMessage) setErrorMessage('');
+                      }}
+                      onToggleVisibility={() =>
+                        setConfirmPasswordVisible((current) => !current)
+                      }
+                    />
+                  </View>
+
+                  <Text style={styles.helperText}>
+                    Usá una contraseña segura de al menos 8 caracteres.
+                  </Text>
+
+                  {!!errorMessage && (
+                    <View style={styles.errorBox}>
+                      <Text style={styles.errorText}>{errorMessage}</Text>
+                    </View>
                   )}
+
+                  <TouchableOpacity
+                    style={[
+                      styles.primaryButton,
+                      isSubmitting && styles.primaryButtonDisabled,
+                    ]}
+                    onPress={handleRegister}
+                    activeOpacity={0.9}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.primaryButtonText}>Registrarme</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.bottomLinkWrap}
+                  onPress={() => navigation.navigate('Login')}
+                >
+                  <Text style={styles.bottomLinkText}>
+                    ¿Ya tienes una cuenta?{' '}
+                    <Text style={styles.bottomLinkStrong}>Inicia sesión</Text>
+                  </Text>
                 </TouchableOpacity>
               </View>
-            </View>
-          </ScrollView>
-        </TouchableWithoutFeedback>
-      </KeyboardAvoidingView>
-
-      <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-        <Text style={styles.register}>
-          ¿Ya tienes una cuenta? Inicia sesión
-        </Text>
-      </TouchableOpacity>
+            </ScrollView>
+          </TouchableWithoutFeedback>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    marginTop: 60,
+  screen: {
+    flex: 1,
+  },
+  safeArea: {
     flex: 1,
   },
   keyboardAvoider: {
@@ -184,71 +244,156 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
   },
+  wrapper: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 22,
+    paddingVertical: 28,
+  },
+  topBrandBlock: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  logoShell: {
+    width: 94,
+    height: 94,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
   logo: {
-    width: 82,
-    height: 84,
-    alignSelf: 'center',
-    marginBottom: 5,
+    width: 72,
+    height: 72,
+    resizeMode: 'contain',
   },
-  title: {
+  brand: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 2.2,
+    color: '#0F172A',
+    marginBottom: 10,
+  },
+  welcomeTitle: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 8,
+  },
+  welcomeSubtitle: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: '#475569',
     textAlign: 'center',
-    fontSize: 8,
-    fontWeight: 600,
+    maxWidth: 320,
   },
-  subtitle: {
-    marginTop: 25,
-    textAlign: 'center',
-    fontSize: 25,
-    fontWeight: 500,
-    fontFamily: 'Anuphan',
-  },
-  button: {
-    backgroundColor: '#001F7C',
-    padding: 13,
-    width: '100%',
-    borderRadius: 18,
-    marginTop: 40,
-  },
-
-  buttonText: {
-    color: '#FFF',
-    fontSize: 18,
-    textAlign: 'center',
-  },
-  containerInput: {
-    padding: 12,
-    width: 340,
-    alignSelf: 'center',
-    marginTop: 19,
-  },
-  input: {
-    marginBottom: 13,
-    height: 45,
+  card: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 28,
+    padding: 22,
     borderWidth: 1,
-    borderColor: '#001F7C',
-    borderRadius: 15,
-    paddingLeft: 10,
+    borderColor: 'rgba(148,163,184,0.18)',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.08,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 5,
   },
-  content: {
-    flex: 1,
+  cardTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 6,
+  },
+  cardSubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    lineHeight: 21,
+    marginBottom: 22,
+  },
+  formGroup: {
+    marginBottom: 14,
   },
   label: {
-    marginBottom: 5,
-    marginLeft: 17,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 8,
+    marginLeft: 4,
   },
-  forgotPass: {
-    textAlign: 'right',
-    marginBottom: 40,
+  input: {
+    height: 54,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    backgroundColor: '#F8FAFC',
+    color: '#0F172A',
+    fontSize: 15,
   },
-  register: {
-    color: '#ffffff',
-    margin: 'auto',
-    marginBottom: 45,
+  helperText: {
+    color: '#64748B',
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: -2,
+    marginBottom: 16,
+    marginLeft: 4,
+  },
+  errorBox: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 16,
   },
   errorText: {
-    color: '#B00020',
+    color: '#B91C1C',
     textAlign: 'center',
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '600',
+  },
+  primaryButton: {
+    height: 56,
+    borderRadius: 18,
+    backgroundColor: '#001F7C',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginTop: 4,
+    shadowColor: '#001F7C',
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  primaryButtonDisabled: {
+    opacity: 0.72,
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  bottomLinkWrap: {
+    alignItems: 'center',
+    marginTop: 22,
+  },
+  bottomLinkText: {
+    color: '#334155',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  bottomLinkStrong: {
+    color: '#001F7C',
+    fontWeight: '800',
   },
 });
 

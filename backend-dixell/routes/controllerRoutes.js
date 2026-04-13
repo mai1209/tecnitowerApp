@@ -9,6 +9,7 @@ router.use(requireAuth);
 
 router.post("/", controllerController.createController);
 router.get("/", controllerController.listControllers);
+router.delete("/:id", controllerController.deleteController);
 router.get("/:id", controllerController.getController);
 router.put("/:id/register-definitions", controllerController.updateControllerRegisterDefinitions);
 router.put("/:id/setpoint-config", controllerController.updateControllerSetpointConfig);

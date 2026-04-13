@@ -152,6 +152,20 @@ Notas:
 
 ## 7. Configuracion de Oracle
 
+Luego de configurar el panel del Elfin:
+
+- desenchufar el Elfin
+- esperar `5` segundos
+- volver a enchufarlo
+- reconectarse a la red WiFi local desde la notebook o celular del tecnico
+- verificar que la red WiFi del Elfin haya desaparecido de la lista de redes
+
+Si la red WiFi del Elfin ya no aparece, eso indica que el equipo se conecto correctamente a la red local configurada.
+
+---
+
+## 8. Configuracion de Oracle
+
 En el backend Oracle, el `.env` debe quedar con:
 
 ```env
@@ -176,7 +190,7 @@ DEBUG_TCP_GATEWAY=0
 
 ---
 
-## 8. Comandos de soporte Oracle
+## 9. Comandos de soporte Oracle
 
 Entrar por SSH:
 
@@ -208,7 +222,7 @@ sudo journalctl -u tecnitower-backend -f
 
 ---
 
-## 9. Validacion tecnica
+## 10. Validacion tecnica
 
 ### Desde la Mac o notebook del tecnico
 
@@ -253,7 +267,7 @@ Si funciona correctamente:
 
 ---
 
-## 10. Regla de instalacion
+## 11. Regla de instalacion
 
 Para nuevas instalaciones, el socket cloud del Elfin puede repetirse siempre:
 

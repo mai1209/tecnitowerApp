@@ -8,6 +8,7 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "agent:local": "node scripts/local-mqtt-agent.js",
+    "user:reset-password": "node scripts/reset-user-password.js",
     "seed:dixell-models": "node scripts/seed-dixell-models.js",
     "migrate:controller-setpoints": "node scripts/migrate-controller-setpoints.js"
   },

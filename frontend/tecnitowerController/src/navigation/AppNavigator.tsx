@@ -109,6 +109,10 @@ export const AppNavigator = () => {
               name="Settings"
               getComponent={() => require('../screens/SettingsScreen').default}
             />
+            <Stack.Screen
+              name="PasswordRecovery"
+              getComponent={() => require('../screens/PasswordRecoveryScreen').default}
+            />
 
             <Stack.Screen name="ControllerLive">
               {props => (
@@ -157,6 +161,10 @@ export const AppNavigator = () => {
             <Stack.Screen
               name="Settings"
               getComponent={() => require('../screens/SettingsScreen').default}
+            />
+            <Stack.Screen
+              name="PasswordRecovery"
+              getComponent={() => require('../screens/PasswordRecoveryScreen').default}
             />
           </>
         )}
