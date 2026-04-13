@@ -169,6 +169,11 @@ const RemoteControlScreen = (props: any) => {
             >
               <Text style={styles.saveBtnText}>{isLoading ? "APLICANDO..." : "APLICAR"}</Text>
             </TouchableOpacity>
+            <Text style={styles.helperText}>
+              {isLoading
+                ? "Aplicando cambio. Puede demorar algunos segundos en reflejarse."
+                : "El cambio puede tardar algunos segundos en confirmarse desde el equipo."}
+            </Text>
           </View>
         );
       })}
@@ -191,6 +196,13 @@ const styles = StyleSheet.create({
   valueText: { fontSize: 24, fontWeight: "900" },
   saveBtn: { backgroundColor: "#111827", padding: 12, borderRadius: 12, marginTop: 10 },
   saveBtnText: { color: "#FFF", textAlign: "center", fontWeight: "800" },
+  helperText: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: "#6B7280",
+    textAlign: "center",
+    marginTop: 8,
+  },
 });
 
 export default RemoteControlScreen;
