@@ -12,6 +12,11 @@ import ControllerLiveScreen from '../screens/ControllerLiveScreen';
 import ControllerRegisterConfigScreen from '../screens/ControllerRegisterConfigScreen';
 import RemoteControlScreen from '../screens/RemoteControlScreen';
 import ManualScreen from '../screens/ManualScreen';
+import AdminDashboardScreen from '../screens/AdminDashboardScreen';
+import AdminUserControllersScreen from '../screens/AdminUserControllersScreen';
+import AdminControllerConfigHubScreen from '../screens/AdminControllerConfigHubScreen';
+import DeviceModelAdminScreen from '../screens/DeviceModelAdminScreen';
+import DeviceModelFormScreen from '../screens/DeviceModelFormScreen';
 import { AuthSession } from '../types/auth';
 import { STORAGE_KEYS } from '../constants/storageKeys';
 
@@ -104,6 +109,56 @@ export const AppNavigator = () => {
               name="Manual"
               component={ManualScreen}
             />
+
+            <Stack.Screen name="AdminDashboard">
+              {props => (
+                <AdminDashboardScreen
+                  {...props}
+                  session={session}
+                  onLogout={handleLogout}
+                />
+              )}
+            </Stack.Screen>
+
+            <Stack.Screen name="AdminUserControllers">
+              {props => (
+                <AdminUserControllersScreen
+                  {...props}
+                  session={session}
+                  onLogout={handleLogout}
+                />
+              )}
+            </Stack.Screen>
+
+            <Stack.Screen name="AdminControllerConfigHub">
+              {props => (
+                <AdminControllerConfigHubScreen
+                  {...props}
+                  session={session}
+                  onLogout={handleLogout}
+                />
+              )}
+            </Stack.Screen>
+
+            <Stack.Screen name="DeviceModelAdmin">
+              {props => (
+                <DeviceModelAdminScreen
+                  {...props}
+                  session={session}
+                  onLogout={handleLogout}
+                />
+              )}
+            </Stack.Screen>
+
+            <Stack.Screen name="DeviceModelForm">
+              {props => (
+                <DeviceModelFormScreen
+                  {...props}
+                  session={session}
+                  onLogout={handleLogout}
+                />
+              )}
+            </Stack.Screen>
 
             <Stack.Screen
               name="Settings"

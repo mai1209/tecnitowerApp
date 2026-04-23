@@ -20,7 +20,6 @@ export async function registerUser(req, res, next) {
     const fullName = String(req.body?.fullName ?? "").trim();
     const email = sanitizeEmail(req.body?.email);
     const password = String(req.body?.password ?? "");
-    const role = req.body?.role;
 
     if (!fullName || !email || !password) {
       return res.status(400).json({
@@ -43,7 +42,7 @@ export async function registerUser(req, res, next) {
       fullName,
       email,
       passwordHash,
-      role,
+      role: "technician",
     });
 
     return res.status(201).json({

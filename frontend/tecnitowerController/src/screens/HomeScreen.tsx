@@ -20,6 +20,49 @@ type Props = {
   onLogout: () => void;
 };
 
+function getControllerRuntimeStatus(controller: any) {
+  const online = Boolean(controller?.connectionState?.online);
+  const alert = controller?.alertState ?? null;
+
+  if (alert?.active) {
+    if (alert.type === 'offline') {
+      return {
+        label: 'Sin conexión',
+        detail: alert.message || 'El equipo no reporta comunicación reciente.',
+        backgroundColor: '#FEE2E2',
+        textColor: '#991B1B',
+        dotColor: '#DC2626',
+      };
+    }
+
+    return {
+      label: 'Alerta activa',
+      detail: alert.message || 'El controlador tiene una alerta pendiente.',
+      backgroundColor: '#FEF3C7',
+      textColor: '#92400E',
+      dotColor: '#D97706',
+    };
+  }
+
+  if (online) {
+    return {
+      label: 'Online',
+      detail: 'Equipo comunicando correctamente.',
+      backgroundColor: '#DCFCE7',
+      textColor: '#166534',
+      dotColor: '#16A34A',
+    };
+  }
+
+  return {
+    label: 'Sin estado',
+    detail: 'Todavía no hay diagnóstico reciente.',
+    backgroundColor: '#E2E8F0',
+    textColor: '#475569',
+    dotColor: '#94A3B8',
+  };
+}
+
 function HomeScreen({ navigation, session, onLogout }: Props) {
   const [controllers, setControllers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,7 +141,7 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
   }, [deletingId, session?.token]);
 
   return (
-    <AppLayout navigation={navigation} onLogout={onLogout}>
+    <AppLayout navigation={navigation} onLogout={onLogout} session={session}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.heroCard}>
           <Text style={styles.eyebrow}>Presentación</Text>
@@ -109,12 +152,16 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
               <Text style={styles.subtitle}>Controladores</Text>
             </View>
 
-            <TouchableOpacity
-              style={styles.primaryCta}
-              onPress={() => navigation.navigate('ControllerForm')}
-            >
-              <Text style={styles.primaryCtaText}>Agregar</Text>
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              {session?.user?.role !== 'admin' && (
+                <TouchableOpacity
+                  style={styles.primaryCta}
+                  onPress={() => navigation.navigate('ControllerForm')}
+                >
+                  <Text style={styles.primaryCtaText}>Agregar</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
 
@@ -130,9 +177,15 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
 
         {!loading && controllers.length === 0 && (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Todavía no registraste controladores</Text>
+            <Text style={styles.emptyTitle}>
+              {session?.user?.role === 'admin'
+                ? 'Este usuario admin no tiene controladores propios'
+                : 'Todavía no registraste controladores'}
+            </Text>
             <Text style={styles.emptyText}>
-              Carga el primero desde “Agregar”.
+              {session?.user?.role === 'admin'
+                ? 'Entrá desde el menú al Panel administrador para gestionar usuarios, controladores y modelos.'
+                : 'Cargá el primero desde “Agregar”.'}
             </Text>
           </View>
         )}
@@ -154,6 +207,35 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
                     ? [ctrl.deviceBrand, ctrl.deviceModel || ctrl.dixellModel].filter(Boolean).join(' · ')
                     : 'SIN MODELO'}
                 </Text>
+                {(() => {
+                  const runtimeStatus = getControllerRuntimeStatus(ctrl);
+                  return (
+                    <>
+                      <View
+                        style={[
+                          styles.runtimeBadge,
+                          { backgroundColor: runtimeStatus.backgroundColor },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            styles.runtimeDot,
+                            { backgroundColor: runtimeStatus.dotColor },
+                          ]}
+                        />
+                        <Text
+                          style={[
+                            styles.runtimeBadgeText,
+                            { color: runtimeStatus.textColor },
+                          ]}
+                        >
+                          {runtimeStatus.label}
+                        </Text>
+                      </View>
+                      <Text style={styles.runtimeDetail}>{runtimeStatus.detail}</Text>
+                    </>
+                  );
+                })()}
               </View>
 
               <View style={styles.arrowBadge}>
@@ -216,6 +298,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 18,
   },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  adminCta: {
+    backgroundColor: '#E0F2FE',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  adminCtaText: {
+    color: '#075985',
+    fontWeight: '900',
+    fontSize: 13,
+  },
   primaryCta: {
     backgroundColor: '#F8FAFC',
     paddingHorizontal: 16,
@@ -265,6 +362,32 @@ const styles = StyleSheet.create({
     color: '#1D4ED8',
     fontSize: 11,
     fontWeight: '800',
+  },
+  runtimeBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  runtimeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  runtimeBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  runtimeDetail: {
+    marginTop: 8,
+    color: '#475569',
+    fontSize: 12,
+    lineHeight: 18,
+    paddingRight: 12,
   },
   arrowBadge: {
     width: 38,

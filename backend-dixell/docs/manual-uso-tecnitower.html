@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>Tecnitower - Manual de uso e instalacion</title>
+    <style>
+      :root {
+        --ink: #111827;
+        --muted: #5f6b7a;
+        --line: #d7dde7;
+        --soft: #f4f7fb;
+        --soft-2: #eef8f4;
+        --accent: #0f766e;
+        --danger: #b91c1c;
+        --warning: #92400e;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: #ffffff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 13.5px;
+        line-height: 1.5;
+      }
+
+      .page {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 34px 42px 48px;
+      }
+
+      .cover {
+        border: 2px solid var(--line);
+        border-radius: 22px;
+        padding: 28px;
+        margin-bottom: 26px;
+        background: linear-gradient(135deg, #f8fafc 0%, #eef8f4 100%);
+      }
+
+      .kicker {
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 34px;
+        line-height: 1.05;
+        letter-spacing: -0.04em;
+      }
+
+      .subtitle {
+        color: var(--muted);
+        font-size: 15px;
+        max-width: 680px;
+        margin: 0;
+      }
+
+      h2 {
+        page-break-after: avoid;
+        margin: 28px 0 10px;
+        font-size: 21px;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+      }
+
+      h3 {
+        page-break-after: avoid;
+        margin: 18px 0 8px;
+        font-size: 15.5px;
+      }
+
+      p {
+        margin: 0 0 10px;
+      }
+
+      ul,
+      ol {
+        margin: 8px 0 12px 22px;
+        padding: 0;
+      }
+
+      li {
+        margin: 4px 0;
+      }
+
+      code {
+        font-family: "SFMono-Regular", Consolas, monospace;
+        background: #edf2f7;
+        padding: 1px 5px;
+        border-radius: 5px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 10px 0 16px;
+        page-break-inside: avoid;
+      }
+
+      th,
+      td {
+        border: 1px solid var(--line);
+        padding: 8px 10px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: var(--soft);
+        font-weight: 800;
+      }
+
+      .box {
+        page-break-inside: avoid;
+        border: 1.5px solid var(--line);
+        border-radius: 14px;
+        padding: 14px 16px;
+        margin: 12px 0 16px;
+        background: var(--soft);
+      }
+
+      .box.success {
+        background: var(--soft-2);
+        border-color: #b7dfd2;
+      }
+
+      .box.warning {
+        background: #fff7ed;
+        border-color: #fed7aa;
+      }
+
+      .box.danger {
+        background: #fef2f2;
+        border-color: #fecaca;
+      }
+
+      .flow {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+        margin: 12px 0 16px;
+      }
+
+      .flow-step {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px 12px;
+        background: #ffffff;
+      }
+
+      .flow-step strong {
+        color: var(--accent);
+      }
+
+      .small {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .checklist li {
+        list-style: none;
+        position: relative;
+        margin-left: 0;
+      }
+
+      .checklist li::before {
+        content: "□";
+        display: inline-block;
+        width: 18px;
+        color: var(--accent);
+        font-weight: 800;
+      }
+
+      .footer {
+        margin-top: 30px;
+        padding-top: 12px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      @page {
+        margin: 16mm;
+      }
+
+      @media print {
+        .page {
+          max-width: none;
+          padding: 0;
+        }
+
+        h2 {
+          break-after: avoid;
+        }
+
+        .page-break {
+          page-break-before: always;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="cover">
+        <div class="kicker">Tecnitower</div>
+        <h1>Manual de uso e instalacion</h1>
+        <p class="subtitle">
+          Guia para configurar el Elfin EW11A, dar de alta un controlador en la app y validar
+          lecturas, setpoint y alertas desde la nube.
+        </p>
+      </section>
+
+      <section>
+        <h2>1. Como funciona el sistema</h2>
+        <p>
+          Tecnitower permite ver temperaturas, controlar setpoints y recibir alertas desde una app
+          movil. El equipo fisico se conecta a internet mediante un gateway Elfin.
+        </p>
+
+        <div class="flow">
+          <div class="flow-step"><strong>Controlador TC-900E</strong> habla por RS485 / Modbus.</div>
+          <div class="flow-step"><strong>Elfin EW11A</strong> convierte RS485 a TCP/IP y se conecta a internet.</div>
+          <div class="flow-step"><strong>Backend en Oracle Cloud</strong> recibe la conexion y consulta los registros.</div>
+          <div class="flow-step"><strong>App Tecnitower</strong> muestra lecturas, setpoint, estado y alertas.</div>
+        </div>
+
+        <div class="box success">
+          <strong>Importante:</strong> no hace falta una notebook encendida en el local. El flujo productivo validado
+          es Elfin TCP Client directo contra el backend en Oracle Cloud.
+        </div>
+      </section>
+
+      <section>
+        <h2>2. Datos necesarios antes de instalar</h2>
+        <ul class="checklist">
+          <li>Nombre y clave de la red WiFi del local.</li>
+          <li>Elfin ID unico para el equipo, por ejemplo <code>2018DP1893</code>.</li>
+          <li>Modelo del controlador, por ejemplo <code>TC900E LOG</code>.</li>
+          <li>Unit ID Modbus del controlador.</li>
+          <li>Baud rate del controlador.</li>
+          <li>Registros de temperatura y setpoint del modelo.</li>
+        </ul>
+
+        <h3>Valores validados para TC900E LOG</h3>
+        <table>
+          <tr><th>Parametro</th><th>Valor</th></tr>
+          <tr><td>Protocol del controlador</td><td><code>Modbus</code></td></tr>
+          <tr><td>Unit ID / F24</td><td><code>1</code></td></tr>
+          <tr><td>Baud rate</td><td><code>9600</code></td></tr>
+          <tr><td>Temperatura S1</td><td>Registro <code>101</code></td></tr>
+          <tr><td>Temperatura S2</td><td>Registro <code>102</code></td></tr>
+          <tr><td>Setpoint normal</td><td>Registro <code>31</code></td></tr>
+        </table>
+      </section>
+
+      <section class="page-break">
+        <h2>3. Configurar el Elfin EW11A</h2>
+        <h3>3.1 Conectarse al panel del Elfin</h3>
+        <ol>
+          <li>Encender el Elfin.</li>
+          <li>Conectarse desde notebook o celular a la red WiFi generada por el Elfin.</li>
+          <li>Abrir el navegador e ingresar a <code>http://10.10.100.254</code>.</li>
+          <li>Ingresar con usuario <code>admin</code> y clave <code>admin</code>, salvo que hayan sido modificados.</li>
+        </ol>
+
+        <h3>3.2 WiFi del local</h3>
+        <p>En <strong>System Settings</strong> configurar:</p>
+        <table>
+          <tr><th>Campo</th><th>Valor</th></tr>
+          <tr><td>WiFi Mode</td><td><code>STA</code></td></tr>
+          <tr><td>STA SSID</td><td>Nombre de la red WiFi del local</td></tr>
+          <tr><td>STA KEY</td><td>Clave de la red WiFi del local</td></tr>
+        </table>
+
+        <h3>3.3 Puerto serial / RS485</h3>
+        <p>En <strong>Serial Port Settings</strong> configurar:</p>
+        <table>
+          <tr><th>Campo</th><th>Valor recomendado</th></tr>
+          <tr><td>Baud Rate</td><td><code>9600</code></td></tr>
+          <tr><td>Data Bit</td><td><code>8</code></td></tr>
+          <tr><td>Stop Bit</td><td><code>1</code></td></tr>
+          <tr><td>Parity</td><td><code>None</code></td></tr>
+          <tr><td>Protocol</td><td><code>Modbus</code></td></tr>
+        </table>
+
+        <div class="box warning">
+          Si el controlador usa otro baud rate o unit ID, se debe respetar el valor real del controlador fisico.
+        </div>
+
+        <h3>3.4 Socket TCP Client</h3>
+        <p>En <strong>Communication Settings</strong> configurar:</p>
+        <table>
+          <tr><th>Campo</th><th>Valor</th></tr>
+          <tr><td>Name</td><td><code>netp</code></td></tr>
+          <tr><td>Protocol</td><td><code>TCP-CLIENT</code></td></tr>
+          <tr><td>Server</td><td><code>137.131.194.247</code></td></tr>
+          <tr><td>Server Port</td><td><code>4001</code></td></tr>
+          <tr><td>Local Port</td><td><code>0</code></td></tr>
+          <tr><td>Buffer Size</td><td><code>512</code></td></tr>
+          <tr><td>Keep Alive</td><td><code>60</code></td></tr>
+          <tr><td>Timeout</td><td><code>0</code></td></tr>
+          <tr><td>Connect Mode</td><td><code>Always</code></td></tr>
+          <tr><td>Register Mode</td><td><code>Link</code></td></tr>
+          <tr><td>Register Code</td><td><code>ELFIN:&lt;elfinId_unico&gt;</code></td></tr>
+          <tr><td>Heart Beat</td><td><code>OFF</code></td></tr>
+          <tr><td>Security</td><td><code>Disable</code></td></tr>
+          <tr><td>Route</td><td><code>Uart</code></td></tr>
+        </table>
+
+        <p>Ejemplo:</p>
+        <div class="box">
+          <code>Register Code = ELFIN:2018DP1893</code>
+        </div>
+
+        <h3>3.5 Guardar y reiniciar</h3>
+        <ol>
+          <li>Presionar <strong>Submit</strong> en las pantallas modificadas.</li>
+          <li>Desenchufar el Elfin.</li>
+          <li>Esperar 5 segundos.</li>
+          <li>Volver a enchufarlo.</li>
+          <li>Conectarse nuevamente a la red WiFi local del local.</li>
+          <li>Verificar que la red WiFi del Elfin haya desaparecido.</li>
+        </ol>
+
+        <div class="box success">
+          Si la red WiFi del Elfin desaparecio, normalmente significa que el equipo ya se conecto a la red WiFi
+          configurada y dejo de trabajar como hotspot de configuracion.
+        </div>
+      </section>
+
+      <section class="page-break">
+        <h2>4. Alta del controlador en la app</h2>
+        <ol>
+          <li>Abrir la app Tecnitower.</li>
+          <li>Iniciar sesion con el usuario asignado.</li>
+          <li>Entrar en <strong>Nuevo Controlador</strong>.</li>
+          <li>Cargar nombre del equipo.</li>
+          <li>Seleccionar marca y modelo.</li>
+          <li>Cargar el <code>elfinId</code> usado en el panel del Elfin.</li>
+          <li>Confirmar unit ID, baud rate y registros del modelo si la pantalla los solicita.</li>
+          <li>Guardar.</li>
+        </ol>
+
+        <div class="box warning">
+          El <code>elfinId</code> de la app debe coincidir exactamente con el Register Code del Elfin,
+          sin repetirlo en otra instalacion.
+        </div>
+      </section>
+
+      <section>
+        <h2>5. Uso diario de la app</h2>
+        <h3>Lectura de temperatura</h3>
+        <p>
+          Entrar al controlador desde la pantalla principal. La app muestra temperatura, setpoint,
+          estado online/offline y alertas configuradas.
+        </p>
+
+        <h3>Cambio de setpoint</h3>
+        <ol>
+          <li>Entrar al controlador.</li>
+          <li>Usar los botones <strong>-</strong> y <strong>+</strong> para ajustar el setpoint.</li>
+          <li>Presionar <strong>Aplicar</strong>.</li>
+          <li>Esperar la confirmacion. El cambio puede tardar algunos segundos en reflejarse.</li>
+        </ol>
+
+        <h3>Alertas</h3>
+        <p>
+          El backend en la nube evalua temperatura minima, temperatura maxima y estado de comunicacion.
+          Las alertas se muestran en la app y pueden integrarse con mensajeria MQTT/EMQX para eventos
+          en tiempo real o futuras notificaciones.
+        </p>
+      </section>
+
+      <section>
+        <h2>6. Servicios cloud utilizados</h2>
+        <table>
+          <tr><th>Servicio</th><th>Uso</th></tr>
+          <tr>
+            <td>Oracle Cloud</td>
+            <td>Servidor backend principal, API de la app y gateway TCP para recibir al Elfin.</td>
+          </tr>
+          <tr>
+            <td>MongoDB Atlas</td>
+            <td>Base de datos de usuarios, controladores, configuraciones, lecturas y estados.</td>
+          </tr>
+          <tr>
+            <td>EMQX Cloud / MQTT</td>
+            <td>Broker de mensajeria para eventos, integraciones y alertas. No requiere Mosquitto local.</td>
+          </tr>
+        </table>
+      </section>
+
+      <section class="page-break">
+        <h2>7. Validacion rapida</h2>
+        <ul class="checklist">
+          <li>El backend responde desde internet.</li>
+          <li>El Elfin queda en estado <code>Connected</code>.</li>
+          <li>La app permite iniciar sesion.</li>
+          <li>El controlador aparece en la app.</li>
+          <li>La pantalla del controlador muestra temperatura.</li>
+          <li>El cambio de setpoint se refleja en el controlador fisico.</li>
+          <li>El estado online/offline cambia correctamente.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>8. Problemas frecuentes</h2>
+        <table>
+          <tr><th>Problema</th><th>Que revisar</th></tr>
+          <tr>
+            <td>No inicia sesion</td>
+            <td>Conexion a internet del celular y disponibilidad del backend en Oracle.</td>
+          </tr>
+          <tr>
+            <td>El controlador figura offline</td>
+            <td>WiFi del local, estado del Elfin, Register Code y puerto 4001.</td>
+          </tr>
+          <tr>
+            <td>No lee temperatura</td>
+            <td>Unit ID, baud rate, protocolo Modbus, A+/B- RS485 y registros configurados.</td>
+          </tr>
+          <tr>
+            <td>El setpoint cambia lento</td>
+            <td>Es esperable que tarde varios segundos porque la orden viaja app -> nube -> Elfin -> controlador.</td>
+          </tr>
+          <tr>
+            <td>El Elfin no aparece en la red local</td>
+            <td>Verificar que este conectado al WiFi correcto o resetearlo y repetir configuracion.</td>
+          </tr>
+        </table>
+      </section>
+
+      <section>
+        <h2>9. Reglas importantes</h2>
+        <ul>
+          <li>No repetir el mismo <code>elfinId</code> en dos instalaciones distintas.</li>
+          <li>No cambiar el puerto <code>4001</code> salvo indicacion tecnica.</li>
+          <li>No modificar Security/TLS del Elfin para este flujo validado.</li>
+          <li>No depender de una notebook local para produccion.</li>
+          <li>Si se cambia de WiFi, hay que reconfigurar el Elfin.</li>
+        </ul>
+      </section>
+
+      <div class="footer">
+        Tecnitower - Manual de uso e instalacion. Version 1.0. Flujo productivo: Elfin TCP Client + Oracle Cloud.
+      </div>
+    </main>
+  </body>
+</html>

@@ -1,15 +1,25 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import { fileURLToPath } from "node:url";
 
 import { connectMongo, disconnectMongo } from "./database/connectMongo.js";
 import authRoutes from "./routes/authRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
 import modbusRoutes from "./routes/modbusRoutes.js";
 import controllerRoutes from "./routes/controllerRoutes.js";
 import dixellModelRoutes from "./routes/dixellModelRoutes.js";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
 import { startMqttListener } from "./mqtt/mqttListener.js";
 import { startTcpGatewayServer, stopTcpGatewayServer } from "./tcp/elfinTcpGatewayServer.js";
+import {
+  startControllerPollingService,
+  stopControllerPollingService,
+} from "./services/controllerPollingService.js";
+import {
+  initControllerRealtimeServer,
+  stopControllerRealtimeServer,
+} from "./services/controllerRealtimeService.js";
 
 const app = express();
 app.use(cors());
@@ -17,8 +27,12 @@ app.use(express.json());
 
 const PORT = Number(process.env.PORT ?? 3001);
 const HOST = process.env.HOST ?? "0.0.0.0";
+const ADMIN_WEB_DIR = fileURLToPath(new URL("./public/admin/", import.meta.url));
+
+app.use("/admin", express.static(ADMIN_WEB_DIR));
 
 app.use("/api/auth", authRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/api/modbus", modbusRoutes);
 app.use("/api/controllers", controllerRoutes);
 app.use("/api/dixell-models", dixellModelRoutes);
@@ -61,6 +75,11 @@ async function shutdown(signal, exitCode = 0) {
       console.log("✔ TCP gateway cerrado");
     }
 
+    await stopControllerRealtimeServer();
+    console.log("✔ WebSocket realtime cerrado");
+
+    await stopControllerPollingService();
+
     await disconnectMongo();
     console.log("✔ MongoDB desconectado");
 
@@ -78,10 +97,12 @@ async function bootstrap() {
     // Iniciamos el listener y guardamos la instancia
     mqttClientInstance = startMqttListener();
     tcpGatewayServer = startTcpGatewayServer();
+    startControllerPollingService();
 
     server = app.listen(PORT, HOST, () => {
       console.log(`🚀 Servidor listo en http://${HOST}:${PORT}`);
     });
+    initControllerRealtimeServer(server);
 
     process.on("SIGINT", () => shutdown("SIGINT", 0));
     process.on("SIGTERM", () => shutdown("SIGTERM", 0));

@@ -14,8 +14,10 @@ import LinearGradient from "react-native-linear-gradient";
 import { 
   BookOpenText, 
   ChevronLeft, 
+  Layers3,
   LogOut, 
   Menu, 
+  ShieldUser,
   Plus,
 } from "lucide-react-native";
 
@@ -25,29 +27,64 @@ const DRAWER_WIDTH = SCREEN_WIDTH * 0.85;
 type SideNavProps = {
   navigation: any;
   onLogout?: () => void;
+  session?: {
+    user?: {
+      role?: "admin" | "technician" | "viewer";
+    };
+  } | null;
 };
 
-export default function SideNav({ navigation, onLogout }: SideNavProps) {
+type SideNavItem = {
+  key: string;
+  label: string;
+  hint: string;
+  icon: any;
+  action: () => void;
+};
+
+export default function SideNav({ navigation, onLogout, session }: SideNavProps) {
   const [open, setOpen] = useState(false);
+  const isAdmin = session?.user?.role === "admin";
 
   const items = useMemo(
-    () => [
-      {
-        key: "controller-form",
-        label: "Agregar controlador",
-        hint: "Alta rápida de equipos",
-        icon: Plus,
-        action: () => navigation.navigate("ControllerForm"),
-      },
-      {
-        key: "manual",
-        label: "Manual técnico",
-        hint: "Referencias y ayuda",
-        icon: BookOpenText,
-        action: () => navigation.navigate("Manual"),
-      },
-    ],
-    [navigation]
+    (): SideNavItem[] =>
+      [
+        !isAdmin
+          ? {
+              key: "controller-form",
+              label: "Agregar controlador",
+              hint: "Alta rápida de equipos",
+              icon: Plus,
+              action: () => navigation.navigate("ControllerForm"),
+            }
+          : null,
+        isAdmin
+          ? {
+              key: "admin-dashboard",
+              label: "Panel administrador",
+              hint: "Usuarios, controladores y permisos",
+              icon: ShieldUser,
+              action: () => navigation.navigate("AdminDashboard"),
+            }
+          : null,
+        isAdmin
+          ? {
+              key: "device-models",
+              label: "Parámetros generales",
+              hint: "Modelos y registros por equipo",
+              icon: Layers3,
+              action: () => navigation.navigate("DeviceModelAdmin"),
+            }
+          : null,
+        {
+          key: "manual",
+          label: "Manual técnico",
+          hint: "Referencias y ayuda",
+          icon: BookOpenText,
+          action: () => navigation.navigate("Manual"),
+        },
+      ].filter((item): item is SideNavItem => Boolean(item)),
+    [isAdmin, navigation]
   );
 
   return (

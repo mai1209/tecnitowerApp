@@ -17,10 +17,18 @@ import {
   readRegistersSnapshotViaElfinTcpClient,
   writeRegisterValueViaElfinTcpClient,
 } from "../services/elfinTcpClientModbusService.js";
+import {
+  getCachedDiagnostic,
+  invalidateDiagnosticCache,
+} from "../services/diagnosticCacheService.js";
+import { touchControllerPolling } from "../services/controllerPollingService.js";
+import { buildControllerRuntimeState } from "../services/controllerAlertService.js";
+import { publishControllerRealtime } from "../services/controllerRealtimeService.js";
 
 const XR35_SETPOINT_REGISTER = 768;
 const STATUS_REGISTER = 1280;
 const DEFAULT_XR35_UNIT_ID = 1;
+const DIAGNOSTIC_TELEMETRY_FRESH_MS = Number(process.env.DIAGNOSTIC_TELEMETRY_FRESH_MS ?? 20000);
 
 function resolveControllerConnection(controller) {
   const model = String(controller?.dixellModel ?? "").toUpperCase();
@@ -105,6 +113,83 @@ async function findModelFromPayload(body = {}) {
   }
 
   return null;
+}
+
+export async function buildControllerPayloadForOwner(owner, body = {}) {
+  const name = String(body?.name ?? "").trim();
+  const elfinId = String(body?.elfinId ?? "").trim().toUpperCase();
+  const ipAddress = String(body?.ipAddress ?? "").trim();
+  const gatewayMode = normalizeTransport(body?.gatewayMode ?? process.env.CONTROL_TRANSPORT ?? "direct");
+
+  if (!owner) {
+    throw new Error("OWNER_REQUIRED");
+  }
+
+  if (!name || !elfinId || (requiresLocalIp(gatewayMode) && !ipAddress)) {
+    throw new Error(
+      !requiresLocalIp(gatewayMode)
+        ? "name y elfinId son obligatorios"
+        : "name, elfinId e ipAddress son obligatorios"
+    );
+  }
+
+  const model = await findModelFromPayload(body);
+  const requestedModelName = body?.deviceModel ?? body?.dixellModel;
+  const normalizedModelName =
+    model?.name ?? (requestedModelName ? String(requestedModelName).trim().toUpperCase() : undefined);
+  const normalizedBrand =
+    model?.brand ?? (body?.deviceBrand ? String(body.deviceBrand).trim().toUpperCase() : undefined);
+  const fallbackUnitId = normalizedModelName === "XR35CX" ? DEFAULT_XR35_UNIT_ID : 1;
+  const registerDefinitions = sanitizeRegisterDefinitions(
+    body?.registerDefinitions ?? model?.registerTemplates ?? []
+  );
+
+  return {
+    owner,
+    name,
+    gatewayMode,
+    elfinId,
+    ipAddress: ipAddress || undefined,
+    modbusPort: body?.modbusPort ?? undefined,
+    baudRate: body?.baudRate ?? model?.defaultBaudRate ?? undefined,
+    dataBits: body?.dataBits ?? model?.defaultDataBits ?? undefined,
+    parity: body?.parity ?? model?.defaultParity ?? undefined,
+    stopBits: body?.stopBits ?? model?.defaultStopBits ?? undefined,
+    unitId: body?.unitId ?? model?.defaultUnitId ?? fallbackUnitId,
+    probe1: body?.probe1 ?? model?.defaultProbe1 ?? resolveDefaultProbe(normalizedModelName, 1),
+    probe2: body?.probe2 ?? model?.defaultProbe2 ?? resolveDefaultProbe(normalizedModelName, 2),
+    deviceModelId: model?._id ?? undefined,
+    deviceModel: normalizedModelName,
+    deviceBrand: normalizedBrand,
+    protocol: body?.protocol ?? model?.protocol ?? undefined,
+    connectionType: body?.connectionType ?? model?.connectionType ?? undefined,
+    dixellModelId: model?._id ?? undefined,
+    dixellModel: normalizedModelName,
+    location: body?.location,
+    notes: body?.notes,
+    setpointRegister: body?.setpointRegister ?? model?.setpointRegister,
+    setpointReadRegister: body?.setpointReadRegister ?? model?.setpointReadRegister,
+    setpointVerifyRegister: body?.setpointVerifyRegister ?? model?.setpointVerifyRegister,
+    setpointMin: body?.setpointMin ?? model?.setpointMin,
+    setpointMax: body?.setpointMax ?? model?.setpointMax,
+    setpointScale: body?.setpointScale ?? model?.setpointScale ?? 10,
+    alertConfig: {
+      enabled: body?.alertConfig?.enabled ?? true,
+      minTemperature:
+        body?.alertConfig?.minTemperature == null
+          ? undefined
+          : Number(body.alertConfig.minTemperature),
+      maxTemperature:
+        body?.alertConfig?.maxTemperature == null
+          ? undefined
+          : Number(body.alertConfig.maxTemperature),
+      offlineAfterMs:
+        body?.alertConfig?.offlineAfterMs == null
+          ? undefined
+          : Number(body.alertConfig.offlineAfterMs),
+    },
+    registerDefinitions,
+  };
 }
 
 function buildRegisterDefinitionFromControllerRegister(controller, overrides = {}) {
@@ -221,6 +306,12 @@ function requiresLocalIp(gatewayMode) {
   return transport !== "elfin-mqtt" && transport !== "tcp-client";
 }
 
+function isRecentTelemetry(telemetry, maxAgeMs = DIAGNOSTIC_TELEMETRY_FRESH_MS) {
+  const receivedAt = telemetry?.receivedAt ? new Date(telemetry.receivedAt).getTime() : NaN;
+  const validMaxAge = Number.isFinite(maxAgeMs) && maxAgeMs > 0 ? maxAgeMs : 20000;
+  return Number.isFinite(receivedAt) && Date.now() - receivedAt <= validMaxAge;
+}
+
 function buildMqttWriteCommand({ connection, definition, value, debugLabel }) {
   return {
     action: "writeRegister",
@@ -237,6 +328,10 @@ function buildMqttWriteCommand({ connection, definition, value, debugLabel }) {
     },
     debugLabel,
   };
+}
+
+function emitControllerRefresh(controllerId, reason) {
+  publishControllerRealtime(controllerId, { reason });
 }
 
 function getTelemetryRegisterValue(telemetry, register) {
@@ -394,67 +489,19 @@ export const createController = async (req, res, next) => {
     if (!owner) {
       return res.status(401).json({ error: "No autenticado" });
     }
-
-    const name = String(req.body?.name ?? "").trim();
-    const elfinId = String(req.body?.elfinId ?? "").trim().toUpperCase();
-    const ipAddress = String(req.body?.ipAddress ?? "").trim();
-    const gatewayMode = normalizeTransport(req.body?.gatewayMode ?? process.env.CONTROL_TRANSPORT ?? "direct");
-
-    if (!name || !elfinId || (requiresLocalIp(gatewayMode) && !ipAddress)) {
-      return res.status(400).json({
-        error:
-          !requiresLocalIp(gatewayMode)
-            ? "name y elfinId son obligatorios"
-            : "name, elfinId e ipAddress son obligatorios",
-      });
-    }
-
-    const model = await findModelFromPayload(req.body);
-    const requestedModelName = req.body?.deviceModel ?? req.body?.dixellModel;
-    const normalizedModelName =
-      model?.name ?? (requestedModelName ? String(requestedModelName).trim().toUpperCase() : undefined);
-    const normalizedBrand =
-      model?.brand ?? (req.body?.deviceBrand ? String(req.body.deviceBrand).trim().toUpperCase() : undefined);
-    const fallbackUnitId = normalizedModelName === "XR35CX" ? DEFAULT_XR35_UNIT_ID : 1;
-    const registerDefinitions = sanitizeRegisterDefinitions(
-      req.body?.registerDefinitions ?? model?.registerTemplates ?? []
-    );
-
-    const payload = {
-      owner,
-      name,
-      gatewayMode,
-      elfinId,
-      ipAddress: ipAddress || undefined,
-      modbusPort: req.body?.modbusPort ?? undefined,
-      baudRate: req.body?.baudRate ?? model?.defaultBaudRate ?? undefined,
-      dataBits: req.body?.dataBits ?? model?.defaultDataBits ?? undefined,
-      parity: req.body?.parity ?? model?.defaultParity ?? undefined,
-      stopBits: req.body?.stopBits ?? model?.defaultStopBits ?? undefined,
-      unitId: req.body?.unitId ?? model?.defaultUnitId ?? fallbackUnitId,
-      probe1: req.body?.probe1 ?? model?.defaultProbe1 ?? resolveDefaultProbe(normalizedModelName, 1),
-      probe2: req.body?.probe2 ?? model?.defaultProbe2 ?? resolveDefaultProbe(normalizedModelName, 2),
-      deviceModelId: model?._id ?? undefined,
-      deviceModel: normalizedModelName,
-      deviceBrand: normalizedBrand,
-      protocol: req.body?.protocol ?? model?.protocol ?? undefined,
-      connectionType: req.body?.connectionType ?? model?.connectionType ?? undefined,
-      dixellModelId: model?._id ?? undefined,
-      dixellModel: normalizedModelName,
-      location: req.body?.location,
-      notes: req.body?.notes,
-      setpointRegister: req.body?.setpointRegister ?? model?.setpointRegister,
-      setpointReadRegister: req.body?.setpointReadRegister ?? model?.setpointReadRegister,
-      setpointVerifyRegister: req.body?.setpointVerifyRegister ?? model?.setpointVerifyRegister,
-      setpointMin: req.body?.setpointMin ?? model?.setpointMin,
-      setpointMax: req.body?.setpointMax ?? model?.setpointMax,
-      setpointScale: req.body?.setpointScale ?? model?.setpointScale ?? 10,
-      registerDefinitions,
-    };
+    const payload = await buildControllerPayloadForOwner(owner, req.body);
 
     const controller = await ControllerModel.create(payload);
     return res.status(201).json({ controller });
   } catch (err) {
+    if (err?.message === "name y elfinId son obligatorios" || err?.message === "name, elfinId e ipAddress son obligatorios") {
+      return res.status(400).json({ error: err.message });
+    }
+    if (err?.code === 11000 && err?.keyPattern?.elfinId) {
+      return res.status(409).json({
+        error: "Ese Elfin ID ya está registrado en otro controlador.",
+      });
+    }
     return next(err);
   }
 };
@@ -488,6 +535,7 @@ export const deleteController = async (req, res) => {
     };
 
     await controller.deleteOne();
+    invalidateDiagnosticCache(controller._id);
 
     return res.json({
       message: "Controlador eliminado correctamente",
@@ -523,6 +571,8 @@ export const updateControllerRegisterDefinitions = async (req, res) => {
     const registerDefinitions = sanitizeRegisterDefinitions(req.body?.registerDefinitions);
     controller.registerDefinitions = registerDefinitions;
     await controller.save();
+    invalidateDiagnosticCache(controller._id);
+    emitControllerRefresh(controller._id, "register-definitions-updated");
 
     return res.json({ registerDefinitions: controller.registerDefinitions });
   } catch (error) {
@@ -535,6 +585,7 @@ export const setControllerSetpoint = async (req, res) => {
   try {
     const controller = await findOwnedController(req.params.id, req.user?.id);
     if (!controller) return res.status(404).json({ error: "Controlador no encontrado" });
+    touchControllerPolling(controller._id);
 
     const temperature = parseFloat(req.body?.temperature);
     if (Number.isNaN(temperature)) {
@@ -564,6 +615,8 @@ export const setControllerSetpoint = async (req, res) => {
 
     publishReadCommands(controller, [definition.register, LEGACY_SETPOINT_REGISTER]);
     setWritingStatus(false);
+    invalidateDiagnosticCache(controller._id);
+    emitControllerRefresh(controller._id, "setpoint-written");
 
     return res.json({ success: true, newSetpoint: temperature, modbus: writeResult });
   } catch (error) {
@@ -582,6 +635,7 @@ export const writeControllerRegister = async (req, res) => {
     if (!controller) {
       return res.status(404).json({ error: "Controlador no encontrado" });
     }
+    touchControllerPolling(controller._id);
 
     const numericRegister = req.body?.register == null ? NaN : Number(req.body.register);
     const key = req.body?.key ? String(req.body.key).trim().toUpperCase() : null;
@@ -599,6 +653,8 @@ export const writeControllerRegister = async (req, res) => {
     const writeResult = await writeDefinitionValue({ controller, definition, value });
     publishReadCommands(controller, [definition.register, definition.verifyRegister]);
     setWritingStatus(false);
+    invalidateDiagnosticCache(controller._id);
+    emitControllerRefresh(controller._id, "register-written");
 
     return res.json({
       success: true,
@@ -621,201 +677,261 @@ export const diagnosticController = async (req, res) => {
   try {
     const controller = await findOwnedController(req.params.id, req.user?.id).lean();
     if (!controller) return res.status(404).json({ error: "No encontrado" });
+    touchControllerPolling(controller._id);
+    const bypassCache = String(req.query?.refresh ?? "").trim() === "1";
+    const revisionKey = controller?.updatedAt
+      ? new Date(controller.updatedAt).toISOString()
+      : "no-updated-at";
+    const response = await getCachedDiagnostic({
+      controllerId: controller._id,
+      revisionKey,
+      bypass: bypassCache,
+      loader: async () => {
+        const connection = resolveControllerConnection(controller);
+        const setpointDefinition = getSetpointDefinition(controller);
+        const displayRegister =
+          Number.isFinite(Number(controller?.setpointReadRegister))
+            ? Number(controller.setpointReadRegister)
+            : LEGACY_SETPOINT_REGISTER;
+        const telemetry = controller?.lastTelemetry ?? null;
+        const recentTelemetry = !bypassCache && isRecentTelemetry(telemetry);
 
-    const connection = resolveControllerConnection(controller);
-    const setpointDefinition = getSetpointDefinition(controller);
-    const displayRegister =
-      Number.isFinite(Number(controller?.setpointReadRegister))
-        ? Number(controller.setpointReadRegister)
-        : LEGACY_SETPOINT_REGISTER;
-    const telemetry = controller?.lastTelemetry ?? null;
+        let probeRaw = null;
+        let setpointsRaw = {};
+        let modbusOnline = false;
+        let mqttRegistersRaw = null;
+        let tcpClientRegistersRaw = null;
+        const visibleDefinitions = getControllerVisibleDefinitions(controller);
 
-    let probeRaw = null;
-    let setpointsRaw = {};
-    let modbusOnline = false;
-    let mqttRegistersRaw = null;
-    let tcpClientRegistersRaw = null;
-    const visibleDefinitions = getControllerVisibleDefinitions(controller);
-
-    if (shouldUseAgentMqttControl(controller)) {
-      try {
-        const registers = [
-          controller?.probe1,
-          displayRegister,
-          setpointDefinition.register,
-          ...visibleDefinitions.map((definition) => definition.register),
-        ];
-        const uniqueRegisters = [...new Set(registers.filter((value) => Number.isFinite(Number(value))).map(Number))];
-        const ack = await publishMqttCommand(controller.elfinId, {
-          action: "readRegisters",
-          registers: uniqueRegisters,
-          connection: { unitId: connection.unitId },
-        });
-        mqttRegistersRaw = ack?.registers ?? null;
-        probeRaw = getSnapshotRegisterValue(mqttRegistersRaw, controller?.probe1);
-        setpointsRaw = {
-          [displayRegister]: getSnapshotRegisterValue(mqttRegistersRaw, displayRegister),
-          [setpointDefinition.register]: getSnapshotRegisterValue(mqttRegistersRaw, setpointDefinition.register),
-        };
-        modbusOnline = Object.values(mqttRegistersRaw ?? {}).some((value) => {
-          if (value === null || value === undefined || value === "") return false;
-          return Number.isFinite(Number(value));
-        });
-      } catch (err) {
-        console.error("❌ [DIAGNOSTIC MQTT AGENT ERROR]:", err?.message || err);
-      }
-    } else if (shouldUseTcpClientControl(controller)) {
-      try {
-        const registers = [
-          controller?.probe1,
-          displayRegister,
-          setpointDefinition.register,
-          ...visibleDefinitions.map((definition) => definition.register),
-        ];
-        const uniqueRegisters = [...new Set(registers.filter((value) => Number.isFinite(Number(value))).map(Number))];
-        tcpClientRegistersRaw = await readRegistersSnapshotViaElfinTcpClient({
-          elfinId: controller.elfinId,
-          unitId: connection.unitId,
-          registers: uniqueRegisters,
-        });
-        probeRaw = getSnapshotRegisterValue(tcpClientRegistersRaw, controller?.probe1);
-        setpointsRaw = {
-          [displayRegister]: getSnapshotRegisterValue(tcpClientRegistersRaw, displayRegister),
-          [setpointDefinition.register]: getSnapshotRegisterValue(
-            tcpClientRegistersRaw,
-            setpointDefinition.register
-          ),
-        };
-        modbusOnline = Object.values(tcpClientRegistersRaw ?? {}).some((value) => {
-          if (value === null || value === undefined || value === "") return false;
-          return Number.isFinite(Number(value));
-        });
-      } catch (err) {
-        console.error("❌ [DIAGNOSTIC TCP CLIENT ERROR]:", err?.message || err);
-      }
-    } else if (shouldUseMqttControl(controller)) {
-      publishReadCommands(controller, [
-        controller?.probe1,
-        displayRegister,
-        setpointDefinition.register,
-      ]);
-    } else {
-      try {
-        const snapshot = await readDiagnosticSnapshot({
-          connection,
-          probeRegister: Number(controller?.probe1 ?? 256),
-          setpointRegister: displayRegister,
-          extraSetpointRegisters: [setpointDefinition.register],
-        });
-        probeRaw = snapshot?.probeRaw ?? null;
-        setpointsRaw = snapshot?.setpointsRaw ?? {};
-        modbusOnline = true;
-      } catch (err) {
-        console.error("❌ [DIAGNOSTIC MODBUS ERROR]:", err?.message || err);
-      }
-    }
-
-    let configuredRegisters = [];
-    try {
-      if (shouldUseMqttControl(controller) || shouldUseTcpClientControl(controller)) {
-        throw new Error("CONTROL_TRANSPORT=mqtt");
-      }
-
-      configuredRegisters = await readRegisterDefinitionsValues({ connection, definitions: visibleDefinitions });
-    } catch (err) {
-      if (tcpClientRegistersRaw) {
-        configuredRegisters = buildDefinitionValuesFromRegisterSnapshot(
-          visibleDefinitions,
-          tcpClientRegistersRaw,
-          "tcp-client"
-        );
-      } else if (mqttRegistersRaw) {
-        configuredRegisters = buildDefinitionValuesFromRegisterSnapshot(visibleDefinitions, mqttRegistersRaw);
-      } else if (shouldUseAgentMqttControl(controller)) {
-        configuredRegisters = buildDefinitionValuesFromRegisterSnapshot(visibleDefinitions, null);
-      } else if (shouldUseTcpClientControl(controller)) {
-        configuredRegisters = buildDefinitionValuesFromRegisterSnapshot(visibleDefinitions, null, "tcp-client");
-      } else {
-        configuredRegisters = buildDefinitionValuesFromTelemetry(visibleDefinitions, telemetry);
-      }
-
-      if (!shouldUseAgentMqttControl(controller) && !shouldUseTcpClientControl(controller)) {
-        publishReadCommands(controller, visibleDefinitions.map((definition) => definition.register));
-      }
-    }
-
-    const probeScale = 10;
-    const scale = setpointDefinition.scale ?? 10;
-    const useTelemetryFallback = !shouldUseAgentMqttControl(controller) && !shouldUseTcpClientControl(controller);
-    const telemetryProbeRaw = useTelemetryFallback
-      ? getTelemetryRegisterValue(telemetry, controller?.probe1)
-      : null;
-    const rawDisplay =
-      getSnapshotRegisterValue(setpointsRaw, displayRegister) ??
-      (useTelemetryFallback ? getTelemetryRegisterValue(telemetry, displayRegister) : null);
-    const rawParam =
-      getSnapshotRegisterValue(setpointsRaw, setpointDefinition.register) ??
-      (useTelemetryFallback ? getTelemetryRegisterValue(telemetry, setpointDefinition.register) : null);
-    const telemetryProbeValue =
-      telemetryProbeRaw === null || telemetryProbeRaw === undefined || telemetryProbeRaw === ""
-        ? null
-        : Number.isFinite(Number(telemetryProbeRaw))
-          ? Number(telemetryProbeRaw) / probeScale
-          : null;
-    const probe1Value = Number.isFinite(probeRaw)
-      ? probeRaw / probeScale
-      : telemetryProbeValue ?? (useTelemetryFallback ? telemetry?.probe1Value : null) ?? null;
-
-    let userParams768 = null;
-    if (!shouldUseMqttControl(controller) && !shouldUseTcpClientControl(controller) && String(controller?.dixellModel ?? "").toUpperCase() === "XR35CX") {
-      userParams768 = await readUserParams768Block({ connection, scale });
-    }
-
-    let status1280 = null;
-    if (!shouldUseMqttControl(controller) && !shouldUseTcpClientControl(controller)) {
-      try {
-        const snap = await readRegistersSnapshot([STATUS_REGISTER], connection);
-        const raw = snap?.[STATUS_REGISTER];
-        if (Number.isFinite(raw)) {
-          const msb = (raw >> 8) & 0xff;
-          const lsb = raw & 0xff;
-          status1280 = {
-            raw,
-            msb,
-            lsb,
-            deviceOn: Boolean(msb & 1),
-            defrostActive: Boolean(msb & (1 << 1)),
-            fastFreezing: Boolean(msb & (1 << 2)),
-            keyboardLock: Boolean(msb & (1 << 3)),
-            energySaving: Boolean(msb & (1 << 6)),
-          };
+        if (shouldUseAgentMqttControl(controller)) {
+          try {
+            const registers = [
+              controller?.probe1,
+              displayRegister,
+              setpointDefinition.register,
+              ...visibleDefinitions.map((definition) => definition.register),
+            ];
+            const uniqueRegisters = [
+              ...new Set(registers.filter((value) => Number.isFinite(Number(value))).map(Number)),
+            ];
+            const ack = await publishMqttCommand(controller.elfinId, {
+              action: "readRegisters",
+              registers: uniqueRegisters,
+              connection: { unitId: connection.unitId },
+            });
+            mqttRegistersRaw = ack?.registers ?? null;
+            probeRaw = getSnapshotRegisterValue(mqttRegistersRaw, controller?.probe1);
+            setpointsRaw = {
+              [displayRegister]: getSnapshotRegisterValue(mqttRegistersRaw, displayRegister),
+              [setpointDefinition.register]: getSnapshotRegisterValue(
+                mqttRegistersRaw,
+                setpointDefinition.register
+              ),
+            };
+            modbusOnline = Object.values(mqttRegistersRaw ?? {}).some((value) => {
+              if (value === null || value === undefined || value === "") return false;
+              return Number.isFinite(Number(value));
+            });
+          } catch (err) {
+            console.error("❌ [DIAGNOSTIC MQTT AGENT ERROR]:", err?.message || err);
+          }
+        } else if (shouldUseTcpClientControl(controller) && !recentTelemetry) {
+          try {
+            const registers = [
+              controller?.probe1,
+              displayRegister,
+              setpointDefinition.register,
+              ...visibleDefinitions.map((definition) => definition.register),
+            ];
+            const uniqueRegisters = [
+              ...new Set(registers.filter((value) => Number.isFinite(Number(value))).map(Number)),
+            ];
+            tcpClientRegistersRaw = await readRegistersSnapshotViaElfinTcpClient({
+              elfinId: controller.elfinId,
+              unitId: connection.unitId,
+              registers: uniqueRegisters,
+            });
+            probeRaw = getSnapshotRegisterValue(tcpClientRegistersRaw, controller?.probe1);
+            setpointsRaw = {
+              [displayRegister]: getSnapshotRegisterValue(tcpClientRegistersRaw, displayRegister),
+              [setpointDefinition.register]: getSnapshotRegisterValue(
+                tcpClientRegistersRaw,
+                setpointDefinition.register
+              ),
+            };
+            modbusOnline = Object.values(tcpClientRegistersRaw ?? {}).some((value) => {
+              if (value === null || value === undefined || value === "") return false;
+              return Number.isFinite(Number(value));
+            });
+          } catch (err) {
+            console.error("❌ [DIAGNOSTIC TCP CLIENT ERROR]:", err?.message || err);
+          }
+        } else if (shouldUseTcpClientControl(controller) && recentTelemetry) {
+          modbusOnline = true;
+        } else if (shouldUseMqttControl(controller)) {
+          publishReadCommands(controller, [
+            controller?.probe1,
+            displayRegister,
+            setpointDefinition.register,
+          ]);
+        } else {
+          try {
+            const snapshot = await readDiagnosticSnapshot({
+              connection,
+              probeRegister: Number(controller?.probe1 ?? 256),
+              setpointRegister: displayRegister,
+              extraSetpointRegisters: [setpointDefinition.register],
+            });
+            probeRaw = snapshot?.probeRaw ?? null;
+            setpointsRaw = snapshot?.setpointsRaw ?? {};
+            modbusOnline = true;
+          } catch (err) {
+            console.error("❌ [DIAGNOSTIC MODBUS ERROR]:", err?.message || err);
+          }
         }
-      } catch (_) {
-        status1280 = null;
-      }
-    }
 
-    const online = shouldUseAgentMqttControl(controller) || shouldUseTcpClientControl(controller)
-      ? modbusOnline
-      : modbusOnline || Boolean(telemetry);
+        let configuredRegisters = [];
+        try {
+          if (shouldUseMqttControl(controller) || shouldUseTcpClientControl(controller)) {
+            throw new Error("CONTROL_TRANSPORT=mqtt");
+          }
 
-    return res.json({
-      online,
-      probe1Value,
-      setpointValue: Number.isFinite(rawDisplay) ? rawDisplay / scale : null,
-      setpointRegister: displayRegister,
-      setpointLegacyValue: Number.isFinite(rawDisplay) ? rawDisplay / scale : null,
-      setpointLegacyRegister: displayRegister,
-      setpointParamValue: Number.isFinite(rawParam) ? rawParam / scale : null,
-      setpointParamRegister: setpointDefinition.register,
-      setpointVerifyRegister: setpointDefinition.verifyRegister,
-      scale,
-      probeScale,
-      userParams768,
-      status1280,
-      configuredRegisters,
-      registerDefinitions: visibleDefinitions,
+          configuredRegisters = await readRegisterDefinitionsValues({
+            connection,
+            definitions: visibleDefinitions,
+          });
+        } catch (err) {
+          if (tcpClientRegistersRaw) {
+            configuredRegisters = buildDefinitionValuesFromRegisterSnapshot(
+              visibleDefinitions,
+              tcpClientRegistersRaw,
+              "tcp-client"
+            );
+          } else if (shouldUseTcpClientControl(controller) && recentTelemetry) {
+            configuredRegisters = buildDefinitionValuesFromTelemetry(visibleDefinitions, telemetry).map(
+              (definition) => ({
+                ...definition,
+                source: "tcp-client-cache",
+              })
+            );
+          } else if (mqttRegistersRaw) {
+            configuredRegisters = buildDefinitionValuesFromRegisterSnapshot(
+              visibleDefinitions,
+              mqttRegistersRaw
+            );
+          } else if (shouldUseAgentMqttControl(controller)) {
+            configuredRegisters = buildDefinitionValuesFromRegisterSnapshot(visibleDefinitions, null);
+          } else if (shouldUseTcpClientControl(controller)) {
+            configuredRegisters = buildDefinitionValuesFromRegisterSnapshot(
+              visibleDefinitions,
+              null,
+              "tcp-client"
+            );
+          } else {
+            configuredRegisters = buildDefinitionValuesFromTelemetry(visibleDefinitions, telemetry);
+          }
+
+          if (!shouldUseAgentMqttControl(controller) && !shouldUseTcpClientControl(controller)) {
+            publishReadCommands(controller, visibleDefinitions.map((definition) => definition.register));
+          }
+        }
+
+        const probeScale = 10;
+        const scale = setpointDefinition.scale ?? 10;
+        const useTelemetryFallback =
+          (!shouldUseAgentMqttControl(controller) && !shouldUseTcpClientControl(controller)) ||
+          (shouldUseTcpClientControl(controller) && recentTelemetry && !tcpClientRegistersRaw);
+        const telemetryProbeRaw = useTelemetryFallback
+          ? getTelemetryRegisterValue(telemetry, controller?.probe1)
+          : null;
+        const rawDisplay =
+          getSnapshotRegisterValue(setpointsRaw, displayRegister) ??
+          (useTelemetryFallback ? getTelemetryRegisterValue(telemetry, displayRegister) : null);
+        const rawParam =
+          getSnapshotRegisterValue(setpointsRaw, setpointDefinition.register) ??
+          (useTelemetryFallback ? getTelemetryRegisterValue(telemetry, setpointDefinition.register) : null);
+        const telemetryProbeValue =
+          telemetryProbeRaw === null || telemetryProbeRaw === undefined || telemetryProbeRaw === ""
+            ? null
+            : Number.isFinite(Number(telemetryProbeRaw))
+              ? Number(telemetryProbeRaw) / probeScale
+              : null;
+        const probe1Value = Number.isFinite(probeRaw)
+          ? probeRaw / probeScale
+          : telemetryProbeValue ?? (useTelemetryFallback ? telemetry?.probe1Value : null) ?? null;
+
+        let userParams768 = null;
+        if (
+          !shouldUseMqttControl(controller) &&
+          !shouldUseTcpClientControl(controller) &&
+          String(controller?.dixellModel ?? "").toUpperCase() === "XR35CX"
+        ) {
+          userParams768 = await readUserParams768Block({ connection, scale });
+        }
+
+        let status1280 = null;
+        if (!shouldUseMqttControl(controller) && !shouldUseTcpClientControl(controller)) {
+          try {
+            const snap = await readRegistersSnapshot([STATUS_REGISTER], connection);
+            const raw = snap?.[STATUS_REGISTER];
+            if (Number.isFinite(raw)) {
+              const msb = (raw >> 8) & 0xff;
+              const lsb = raw & 0xff;
+              status1280 = {
+                raw,
+                msb,
+                lsb,
+                deviceOn: Boolean(msb & 1),
+                defrostActive: Boolean(msb & (1 << 1)),
+                fastFreezing: Boolean(msb & (1 << 2)),
+                keyboardLock: Boolean(msb & (1 << 3)),
+                energySaving: Boolean(msb & (1 << 6)),
+              };
+            }
+          } catch (_) {
+            status1280 = null;
+          }
+        }
+
+        const online =
+          shouldUseAgentMqttControl(controller) || shouldUseTcpClientControl(controller)
+            ? modbusOnline || (shouldUseTcpClientControl(controller) && recentTelemetry)
+            : modbusOnline || Boolean(telemetry);
+        const responseTelemetry =
+          Number.isFinite(probe1Value) || telemetry
+            ? {
+                probe1Value,
+                temperature: probe1Value,
+                receivedAt: tcpClientRegistersRaw || mqttRegistersRaw ? new Date() : telemetry?.receivedAt,
+              }
+            : null;
+        const runtimeState = buildControllerRuntimeState(controller, {
+          telemetry: responseTelemetry ?? telemetry,
+        });
+
+        return {
+          online,
+          probe1Value,
+          setpointValue: Number.isFinite(rawDisplay) ? rawDisplay / scale : null,
+          setpointRegister: displayRegister,
+          setpointLegacyValue: Number.isFinite(rawDisplay) ? rawDisplay / scale : null,
+          setpointLegacyRegister: displayRegister,
+          setpointParamValue: Number.isFinite(rawParam) ? rawParam / scale : null,
+          setpointParamRegister: setpointDefinition.register,
+          setpointVerifyRegister: setpointDefinition.verifyRegister,
+          scale,
+          probeScale,
+          userParams768,
+          status1280,
+          connectionState: runtimeState.connectionState,
+          alertState: runtimeState.alertState,
+          configuredRegisters,
+          registerDefinitions: visibleDefinitions,
+        };
+      },
     });
+
+    return res.json(response);
   } catch (err) {
     console.error("❌ [DIAGNOSTIC ERROR]:", err?.message || err);
     return res.json({ online: false, probe1Value: null, setpointValue: null, configuredRegisters: [] });
@@ -855,6 +971,7 @@ export const scanControllerSetpoint = async (req, res) => {
         controller.setpointVerifyRegister = controller.setpointReadRegister;
       }
       await controller.save();
+      invalidateDiagnosticCache(controller._id);
     }
 
     return res.json(result);
@@ -883,6 +1000,7 @@ export const setControllerSetpoint768 = async (req, res) => {
   try {
     const controller = await findOwnedController(req.params.id, req.user?.id);
     if (!controller) return res.status(404).json({ error: "Controlador no encontrado" });
+    touchControllerPolling(controller._id);
 
     const model = String(controller?.dixellModel ?? "").toUpperCase();
     if (model !== "XR35CX") {
@@ -918,6 +1036,8 @@ export const setControllerSetpoint768 = async (req, res) => {
     });
     publishReadCommands(controller, [768]);
     setWritingStatus(false);
+    invalidateDiagnosticCache(controller._id);
+    emitControllerRefresh(controller._id, "setpoint-768-written");
 
     return res.json({ success: true, newValue: numericValue, modbus: writeResult });
   } catch (error) {
@@ -937,6 +1057,7 @@ export const updateControllerSetpointConfig = async (req, res) => {
     if (!controller) {
       return res.status(404).json({ error: "Controlador no encontrado" });
     }
+    touchControllerPolling(controller._id);
 
     if (req.body?.setpointRegister != null) {
       controller.setpointRegister = Number(req.body.setpointRegister);
@@ -952,6 +1073,8 @@ export const updateControllerSetpointConfig = async (req, res) => {
     }
 
     await controller.save();
+    invalidateDiagnosticCache(controller._id);
+    emitControllerRefresh(controller._id, "setpoint-config-updated");
 
     return res.json({
       setpointRegister: controller.setpointRegister,
@@ -971,6 +1094,7 @@ export const updateControllerConnectionConfig = async (req, res) => {
     if (!controller) {
       return res.status(404).json({ error: "Controlador no encontrado" });
     }
+    touchControllerPolling(controller._id);
 
     if (req.body?.ipAddress != null) {
       const ipAddress = String(req.body.ipAddress).trim();
@@ -1025,6 +1149,8 @@ export const updateControllerConnectionConfig = async (req, res) => {
     }
 
     await controller.save();
+    invalidateDiagnosticCache(controller._id);
+    emitControllerRefresh(controller._id, "connection-config-updated");
 
     return res.json({
       gatewayMode: controller.gatewayMode,
@@ -1038,5 +1164,69 @@ export const updateControllerConnectionConfig = async (req, res) => {
   } catch (error) {
     console.error("❌ [CONNECTION CONFIG ERROR]:", error?.message || error);
     return res.status(500).json({ error: "Error guardando configuracion de conexion" });
+  }
+};
+
+export const updateControllerAlertConfig = async (req, res) => {
+  try {
+    const controller = await findOwnedController(req.params.id, req.user?.id);
+    if (!controller) {
+      return res.status(404).json({ error: "Controlador no encontrado" });
+    }
+
+    const nextConfig = {
+      ...(controller.alertConfig?.toObject?.() ?? controller.alertConfig ?? {}),
+    };
+
+    if (req.body?.enabled != null) {
+      nextConfig.enabled = Boolean(req.body.enabled);
+    }
+
+    if (req.body?.minTemperature !== undefined) {
+      nextConfig.minTemperature =
+        req.body.minTemperature === null || req.body.minTemperature === ""
+          ? undefined
+          : Number(req.body.minTemperature);
+      if (nextConfig.minTemperature !== undefined && !Number.isFinite(nextConfig.minTemperature)) {
+        return res.status(400).json({ error: "Temperatura mínima inválida" });
+      }
+    }
+
+    if (req.body?.maxTemperature !== undefined) {
+      nextConfig.maxTemperature =
+        req.body.maxTemperature === null || req.body.maxTemperature === ""
+          ? undefined
+          : Number(req.body.maxTemperature);
+      if (nextConfig.maxTemperature !== undefined && !Number.isFinite(nextConfig.maxTemperature)) {
+        return res.status(400).json({ error: "Temperatura máxima inválida" });
+      }
+    }
+
+    if (req.body?.offlineAfterMs !== undefined) {
+      nextConfig.offlineAfterMs =
+        req.body.offlineAfterMs === null || req.body.offlineAfterMs === ""
+          ? undefined
+          : Number(req.body.offlineAfterMs);
+      if (
+        nextConfig.offlineAfterMs !== undefined &&
+        (!Number.isFinite(nextConfig.offlineAfterMs) || nextConfig.offlineAfterMs < 1000)
+      ) {
+        return res.status(400).json({ error: "offlineAfterMs inválido" });
+      }
+    }
+
+    controller.alertConfig = nextConfig;
+    await controller.save();
+    invalidateDiagnosticCache(controller._id);
+    emitControllerRefresh(controller._id, "alert-config-updated");
+
+    return res.json({
+      alertConfig: controller.alertConfig,
+      alertState: controller.alertState ?? null,
+      connectionState: controller.connectionState ?? null,
+    });
+  } catch (error) {
+    console.error("❌ [ALERT CONFIG ERROR]:", error?.message || error);
+    return res.status(500).json({ error: "Error guardando configuración de alertas" });
   }
 };

@@ -6,15 +6,16 @@ import {
   ScrollView,
   RefreshControl,
   StatusBar,
+  TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LinearGradient from 'react-native-linear-gradient';
 import AppLayout from '../layouts/AppLayout';
-import { fetchDiagnostic } from '../services/api';
+import { fetchDiagnostic, getControllerWebSocketUrl } from '../services/api';
 import RemoteControlScreen from './RemoteControlScreen';
 import { STORAGE_KEYS } from '../constants/storageKeys';
-import { Activity, Cpu, Thermometer } from 'lucide-react-native';
+import { Activity, Cpu, Settings2, Thermometer } from 'lucide-react-native';
 
 const PRESENTATION_READINGS = [
   { key: 'SET', label: 'Setpoint normal' },
@@ -34,6 +35,8 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
     userParams768: null as any,
     status1280: null as any,
     online: false,
+    connectionState: controller?.connectionState ?? null,
+    alertState: controller?.alertState ?? null,
     paramSetpoint: null,
     paramSetpointRegister: null,
     configuredRegisters: (controller?.registerDefinitions as any[]) ?? [],
@@ -41,6 +44,9 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
   
   const [refreshing, setRefreshing] = useState(false);
   const isMountedRef = useRef(true);
+  const socketRef = useRef<WebSocket | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const realtimeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getConfiguredRegister = useCallback((key: string) => {
     return data.configuredRegisters.find((definition: any) => {
@@ -61,7 +67,19 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
 
   useEffect(() => {
     isMountedRef.current = true;
-    return () => { isMountedRef.current = false; };
+    return () => {
+      isMountedRef.current = false;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+      }
+      if (realtimeRefreshTimerRef.current) {
+        clearTimeout(realtimeRefreshTimerRef.current);
+      }
+      if (socketRef.current) {
+        socketRef.current.close();
+        socketRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -93,6 +111,8 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
         userParams768: json?.userParams768 ?? null,
         status1280: json?.status1280 ?? null,
         online: Boolean(json?.online),
+        connectionState: json?.connectionState ?? null,
+        alertState: json?.alertState ?? null,
         paramSetpoint: json?.setpointParamValue ?? null,
         paramSetpointRegister: json?.setpointParamRegister ?? null,
         configuredRegisters,
@@ -116,17 +136,112 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
     }
   }, [controller._id, session.token]);
 
+  const scheduleRealtimeRefresh = useCallback((delayMs = 150) => {
+    if (realtimeRefreshTimerRef.current) {
+      clearTimeout(realtimeRefreshTimerRef.current);
+    }
+
+    realtimeRefreshTimerRef.current = setTimeout(() => {
+      fetchData();
+    }, delayMs);
+  }, [fetchData]);
+
+  const currentAlert = data.alertState;
+  const showAlertBanner = Boolean(currentAlert?.active);
+  const alertBannerStyle = showAlertBanner
+    ? currentAlert?.type === 'offline'
+      ? {
+          backgroundColor: '#FEF2F2',
+          borderColor: '#FECACA',
+          titleColor: '#991B1B',
+          textColor: '#7F1D1D',
+        }
+      : {
+          backgroundColor: '#FFFBEB',
+          borderColor: '#FDE68A',
+          titleColor: '#92400E',
+          textColor: '#78350F',
+        }
+    : null;
+  const statusMessage = showAlertBanner
+    ? currentAlert?.message
+    : data.online
+      ? 'Comunicación estable con el controlador.'
+      : 'Sin comunicación reciente con el controlador.';
+
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 6000);
+    const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, [fetchData]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function connectRealtime() {
+      try {
+        const wsUrl = await getControllerWebSocketUrl(controller._id, session.token);
+        if (cancelled) return;
+
+        if (socketRef.current) {
+          socketRef.current.close();
+          socketRef.current = null;
+        }
+
+        const socket = new WebSocket(wsUrl);
+        socketRef.current = socket;
+
+        socket.onopen = () => {
+          scheduleRealtimeRefresh(100);
+        };
+
+        socket.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(String(event?.data ?? '{}'));
+            if (payload?.type === 'connected' || payload?.type === 'controller-refresh') {
+              scheduleRealtimeRefresh(payload?.type === 'connected' ? 100 : 200);
+            }
+          } catch {
+            scheduleRealtimeRefresh(200);
+          }
+        };
+
+        socket.onerror = () => {};
+
+        socket.onclose = () => {
+          if (cancelled) return;
+          reconnectTimerRef.current = setTimeout(() => {
+            connectRealtime();
+          }, 3000);
+        };
+      } catch {
+        if (cancelled) return;
+        reconnectTimerRef.current = setTimeout(() => {
+          connectRealtime();
+        }, 5000);
+      }
+    }
+
+    connectRealtime();
+
+    return () => {
+      cancelled = true;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      if (socketRef.current) {
+        socketRef.current.close();
+        socketRef.current = null;
+      }
+    };
+  }, [controller._id, scheduleRealtimeRefresh, session.token]);
 
   return (
     <View style={styles.screen}>
       <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
       
-      <AppLayout navigation={navigation} onLogout={onLogout}>
+      <AppLayout navigation={navigation} onLogout={onLogout} session={session}>
         <ScrollView
           refreshControl={
             <RefreshControl
@@ -197,6 +312,39 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
               <Thermometer color="#64748B" size={18} />
               <Text style={styles.cardLabel}>TEMPERATURA DE CÁMARA</Text>
             </View>
+
+            <View
+              style={[
+                styles.statusMessageBox,
+                showAlertBanner && alertBannerStyle
+                  ? {
+                      backgroundColor: alertBannerStyle.backgroundColor,
+                      borderColor: alertBannerStyle.borderColor,
+                    }
+                  : undefined,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.statusMessageTitle,
+                  showAlertBanner && alertBannerStyle
+                    ? { color: alertBannerStyle.titleColor }
+                    : undefined,
+                ]}
+              >
+                {showAlertBanner ? 'ALERTA DEL CONTROLADOR' : 'ESTADO DEL CONTROLADOR'}
+              </Text>
+              <Text
+                style={[
+                  styles.statusMessageText,
+                  showAlertBanner && alertBannerStyle
+                    ? { color: alertBannerStyle.textColor }
+                    : undefined,
+                ]}
+              >
+                {statusMessage}
+              </Text>
+            </View>
             
             <View style={styles.tempContainer}>
               <Text style={styles.tempValue}>
@@ -221,6 +369,20 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
           </View>
 
           <View style={styles.section}>
+            {session?.user?.role === 'admin' && (
+              <TouchableOpacity
+                style={styles.configButton}
+                onPress={() =>
+                  navigation.navigate('ControllerRegisterConfig', {
+                    controller,
+                    adminMode: true,
+                  })
+                }
+              >
+                <Settings2 color="#0F172A" size={18} strokeWidth={2.2} />
+                <Text style={styles.configButtonText}>Configuración técnica</Text>
+              </TouchableOpacity>
+            )}
             <RemoteControlScreen
               controllerId={controller._id}
               token={session?.token}
@@ -302,6 +464,27 @@ const styles = StyleSheet.create({
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 15 },
   cardLabel: { fontSize: 11, fontWeight: '800', color: '#94A3B8', letterSpacing: 1 },
+  statusMessageBox: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 18,
+  },
+  statusMessageTitle: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    color: '#334155',
+    marginBottom: 4,
+  },
+  statusMessageText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#475569',
+  },
   tempContainer: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', marginVertical: 10 },
   tempValue: { fontSize: 80, fontWeight: '900', color: '#0F172A', letterSpacing: -2 },
   tempUnit: { fontSize: 24, fontWeight: '700', color: '#CBD5E1', marginTop: 12, marginLeft: 4 },
@@ -312,6 +495,23 @@ const styles = StyleSheet.create({
   regBadge: { backgroundColor: '#F1F5F9', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
   regBadgeText: { fontSize: 10, fontWeight: '800', color: '#64748B' },
   section: { gap: 12, marginBottom: 20 },
+  configButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  configButtonText: {
+    color: '#0F172A',
+    fontSize: 14,
+    fontWeight: '800',
+  },
   card: { backgroundColor: '#FFF', borderRadius: 20, padding: 16, marginBottom: 20, elevation: 3, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8 },
   readRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderColor: '#E5E7EB' },
   readLabel: { fontSize: 15, fontWeight: '700', color: '#111827' },

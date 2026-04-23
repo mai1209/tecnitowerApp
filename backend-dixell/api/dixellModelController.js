@@ -34,6 +34,48 @@ function sanitizeRegisterTemplates(rawTemplates = []) {
     .filter(Boolean);
 }
 
+function ensureAdmin(req, res) {
+  if (req.user?.role !== "admin") {
+    res.status(403).json({ error: "Solo un admin puede gestionar modelos" });
+    return false;
+  }
+  return true;
+}
+
+function buildModelPayload(rawBody = {}) {
+  return {
+    brand: String(rawBody?.brand ?? "DIXELL").trim().toUpperCase(),
+    name: String(rawBody?.name ?? "").trim().toUpperCase(),
+    description: rawBody?.description,
+    protocol: rawBody?.protocol ?? "modbus-tcp",
+    connectionType: rawBody?.connectionType ?? "tcp",
+    defaultUnitId: rawBody?.defaultUnitId,
+    defaultModbusPort: rawBody?.defaultModbusPort,
+    defaultBaudRate: rawBody?.defaultBaudRate,
+    defaultDataBits: rawBody?.defaultDataBits,
+    defaultParity: rawBody?.defaultParity,
+    defaultStopBits: rawBody?.defaultStopBits,
+    defaultProbe1: rawBody?.defaultProbe1,
+    defaultProbe2: rawBody?.defaultProbe2,
+    registerCount: rawBody?.registerCount,
+    notes: rawBody?.notes,
+    setpointRegister: rawBody?.setpointRegister,
+    setpointReadRegister: rawBody?.setpointReadRegister,
+    setpointVerifyRegister: rawBody?.setpointVerifyRegister,
+    setpointMin: rawBody?.setpointMin,
+    setpointMax: rawBody?.setpointMax,
+    setpointScale: rawBody?.setpointScale,
+    registerTemplates: sanitizeRegisterTemplates(rawBody?.registerTemplates),
+  };
+}
+
+function handleDuplicateModelName(err, res) {
+  if (err?.code === 11000) {
+    return res.status(409).json({ error: "Ya existe un modelo con ese nombre" });
+  }
+  return null;
+}
+
 export async function listDeviceModels(_req, res, next) {
   try {
     const models = await DeviceModel.find().sort({ brand: 1, name: 1 }).lean();
@@ -45,35 +87,9 @@ export async function listDeviceModels(_req, res, next) {
 
 export async function createDeviceModel(req, res, next) {
   try {
-    const role = req.user?.role;
-    if (role !== "admin") {
-      return res.status(403).json({ error: "Solo un admin puede crear modelos" });
-    }
+    if (!ensureAdmin(req, res)) return;
 
-    const payload = {
-      brand: String(req.body?.brand ?? "DIXELL").trim().toUpperCase(),
-      name: String(req.body?.name ?? "").trim().toUpperCase(),
-      description: req.body?.description,
-      protocol: req.body?.protocol ?? "modbus-tcp",
-      connectionType: req.body?.connectionType ?? "tcp",
-      defaultUnitId: req.body?.defaultUnitId,
-      defaultModbusPort: req.body?.defaultModbusPort,
-      defaultBaudRate: req.body?.defaultBaudRate,
-      defaultDataBits: req.body?.defaultDataBits,
-      defaultParity: req.body?.defaultParity,
-      defaultStopBits: req.body?.defaultStopBits,
-      defaultProbe1: req.body?.defaultProbe1,
-      defaultProbe2: req.body?.defaultProbe2,
-      registerCount: req.body?.registerCount,
-      notes: req.body?.notes,
-      setpointRegister: req.body?.setpointRegister,
-      setpointReadRegister: req.body?.setpointReadRegister,
-      setpointVerifyRegister: req.body?.setpointVerifyRegister,
-      setpointMin: req.body?.setpointMin,
-      setpointMax: req.body?.setpointMax,
-      setpointScale: req.body?.setpointScale,
-      registerTemplates: sanitizeRegisterTemplates(req.body?.registerTemplates),
-    };
+    const payload = buildModelPayload(req.body);
 
     if (!payload.name) {
       return res.status(400).json({ error: "name es requerido" });
@@ -82,6 +98,31 @@ export async function createDeviceModel(req, res, next) {
     const modelDoc = await DeviceModel.create(payload);
     return res.status(201).json({ model: modelDoc });
   } catch (err) {
+    if (handleDuplicateModelName(err, res)) return;
+    return next(err);
+  }
+}
+
+export async function updateDeviceModel(req, res, next) {
+  try {
+    if (!ensureAdmin(req, res)) return;
+
+    const modelDoc = await DeviceModel.findById(req.params.id);
+    if (!modelDoc) {
+      return res.status(404).json({ error: "Modelo no encontrado" });
+    }
+
+    const payload = buildModelPayload(req.body);
+    if (!payload.name) {
+      return res.status(400).json({ error: "name es requerido" });
+    }
+
+    Object.assign(modelDoc, payload);
+    await modelDoc.save();
+
+    return res.json({ model: modelDoc });
+  } catch (err) {
+    if (handleDuplicateModelName(err, res)) return;
     return next(err);
   }
 }

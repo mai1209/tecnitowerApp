@@ -1,6 +1,61 @@
 import mongoose from "mongoose";
 import { registerDefinitionSchema } from "./schemas/registerDefinitionSchema.js";
 
+const connectionStateSchema = new mongoose.Schema(
+  {
+    online: {
+      type: Boolean,
+      default: false,
+    },
+    lastSeenAt: Date,
+    lastPollAt: Date,
+    lastPollError: String,
+  },
+  { _id: false }
+);
+
+const alertConfigSchema = new mongoose.Schema(
+  {
+    enabled: {
+      type: Boolean,
+      default: true,
+    },
+    minTemperature: Number,
+    maxTemperature: Number,
+    offlineAfterMs: {
+      type: Number,
+      min: 1000,
+    },
+  },
+  { _id: false }
+);
+
+const alertStateSchema = new mongoose.Schema(
+  {
+    active: {
+      type: Boolean,
+      default: false,
+    },
+    type: {
+      type: String,
+      enum: ["none", "offline", "temperature_high", "temperature_low"],
+      default: "none",
+    },
+    severity: {
+      type: String,
+      enum: ["info", "warning", "critical"],
+      default: "info",
+    },
+    message: String,
+    since: Date,
+    lastEvaluatedAt: Date,
+    temperature: Number,
+    threshold: Number,
+    online: Boolean,
+  },
+  { _id: false }
+);
+
 const controllerSchema = new mongoose.Schema(
   {
     owner: {
@@ -125,6 +180,18 @@ const controllerSchema = new mongoose.Schema(
         receivedAt: Date,
       },
       default: null,
+    },
+    connectionState: {
+      type: connectionStateSchema,
+    },
+    alertConfig: {
+      type: alertConfigSchema,
+      default: () => ({
+        enabled: true,
+      }),
+    },
+    alertState: {
+      type: alertStateSchema,
     },
     setpointRegister: {
       type: Number,

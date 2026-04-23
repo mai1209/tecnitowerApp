@@ -1,6 +1,8 @@
 import mqtt from "mqtt";
 import { ControllerModel } from "../models/Controller.js";
 import { ControllerReading } from "../models/ControllerReading.js";
+import { buildControllerRuntimeState } from "../services/controllerAlertService.js";
+import { publishControllerRealtime } from "../services/controllerRealtimeService.js";
 
 export let mqttClient = null;
 const pendingCommands = new Map();
@@ -148,7 +150,10 @@ async function handleMessage(topic, messageBuffer) {
     if (!controller) return;
 
     const telemetry = buildTelemetry(payload, topic, controller);
+    const runtimeState = buildControllerRuntimeState(controller, { telemetry });
     controller.lastTelemetry = telemetry;
+    controller.connectionState = runtimeState.connectionState;
+    controller.alertState = runtimeState.alertState;
     await controller.save();
 
     await ControllerReading.create({
@@ -158,6 +163,8 @@ async function handleMessage(topic, messageBuffer) {
       topic,
       receivedAt: telemetry.receivedAt,
     });
+
+    publishControllerRealtime(controller._id, { reason: "mqtt-telemetry" });
   } catch (err) {
     console.error("[MQTT] Error guardando lectura:", err.message);
   }

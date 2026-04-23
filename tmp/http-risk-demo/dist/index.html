@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>11 Espacio Holistico | Comparacion de Riesgo HTTP</title>
+    <style>
+      :root {
+        --paper: rgba(255, 251, 244, 0.84);
+        --ink: #312a21;
+        --muted: #6d6256;
+        --accent: #6f7f63;
+        --accent-2: #b8794b;
+        --border: rgba(49, 42, 33, 0.1);
+        --shadow: 0 24px 80px rgba(79, 63, 47, 0.14);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(111, 127, 99, 0.22), transparent 26%),
+          radial-gradient(circle at 85% 20%, rgba(184, 121, 75, 0.14), transparent 22%),
+          linear-gradient(180deg, #fffaf2 0%, #efe4d5 100%);
+      }
+
+      main {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 44px 20px 64px;
+      }
+
+      .hero,
+      .panel {
+        background: var(--paper);
+        backdrop-filter: blur(14px);
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        padding: 32px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(38px, 8vw, 76px);
+        line-height: 0.94;
+        letter-spacing: -0.05em;
+        font-family: Georgia, "Times New Roman", serif;
+        font-weight: 600;
+      }
+
+      .lead {
+        margin-top: 16px;
+        max-width: 720px;
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.65;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 28px;
+      }
+
+      .button,
+      .button-alt {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 48px;
+        padding: 0 18px;
+        border-radius: 999px;
+        text-decoration: none;
+        font-weight: 700;
+      }
+
+      .button {
+        color: white;
+        background: linear-gradient(135deg, var(--accent), #58694c);
+      }
+
+      .button-alt {
+        color: var(--ink);
+        background: rgba(49, 42, 33, 0.06);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 18px;
+        margin-top: 22px;
+      }
+
+      .panel {
+        padding: 24px;
+      }
+
+      .panel h2 {
+        margin: 0 0 10px;
+      }
+
+      ul {
+        margin: 12px 0 0;
+        padding-left: 18px;
+        color: var(--muted);
+      }
+
+      li + li {
+        margin-top: 8px;
+      }
+
+      code {
+        padding: 2px 6px;
+        border-radius: 8px;
+        background: rgba(49, 42, 33, 0.06);
+        font-family: ui-monospace, "SFMono-Regular", monospace;
+        font-size: 0.95em;
+      }
+
+      .eyebrow {
+        color: var(--accent-2);
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .topbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+
+      .topbar span {
+        display: inline-flex;
+        align-items: center;
+        min-height: 34px;
+        padding: 0 12px;
+        border-radius: 999px;
+        color: var(--muted);
+        background: rgba(49, 42, 33, 0.05);
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .evidence-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 18px;
+        margin-top: 22px;
+      }
+
+      .evidence-card {
+        padding: 22px;
+        border-radius: 22px;
+        background: rgba(255, 251, 244, 0.84);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+      }
+
+      .evidence-card h2 {
+        margin: 0 0 10px;
+      }
+
+      .evidence-card p + p {
+        margin-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <div class="topbar">
+          <span>Sesiones</span>
+          <span>Resenas</span>
+          <span>Donde estamos</span>
+          <span>WhatsApp</span>
+        </div>
+        <div class="eyebrow">11 Espacio Holistico</div>
+        <h1>Demo visual del riesgo por HTTP</h1>
+        <p class="lead">Esta version esta adaptada al tono del sitio real: sesiones holisticas, reserva, regalo y paso a pago. La comparacion sirve para mostrarle al cliente que el problema aparece antes del checkout, cuando la pagina todavia puede ser modificada si no se fuerza HTTPS.</p>
+        <div class="actions">
+          <a class="button" href="./normal.html">Abrir version legitima</a>
+          <a class="button-alt" href="./altered.html">Abrir version alterada</a>
+        </div>
+      </section>
+
+      <section class="evidence-grid">
+        <article class="evidence-card">
+          <h2>Esto si se observo en su web</h2>
+          <p>En <code>http://11espacioholistico.com</code> y <code>http://www.11espacioholistico.com</code> el servidor respondio <code>200 OK</code>, no <code>301</code> ni <code>308</code>.</p>
+          <p>Eso significa que el sitio real acepta HTTP y no fuerza HTTPS desde el servidor.</p>
+        </article>
+        <article class="evidence-card">
+          <h2>Que muestra esta demo</h2>
+          <p>No es una copia del sitio ni un ataque en vivo. Es una representacion visual aplicada a su flujo de reserva, pago y contacto.</p>
+          <p>La relacion con su web es directa: si el dominio acepta HTTP, un cliente podria recibir una version alterada antes de llegar al pago real.</p>
+        </article>
+      </section>
+
+      <section class="grid">
+        <article class="panel">
+          <h2>Como presentarla</h2>
+          <ul>
+            <li>Mostra primero la version legitima y remarca que se parece a una reserva normal del negocio.</li>
+            <li>Abri despues la version alterada y marca tres cambios visibles: boton de pago, WhatsApp y email.</li>
+            <li>Cerra con la idea central: si el sitio acepta <code>http://</code>, el riesgo es que el usuario vea una respuesta distinta de la original.</li>
+          </ul>
+        </article>
+        <article class="panel">
+          <h2>Mensaje recomendado</h2>
+          <ul>
+            <li>El problema no es SumUp en si, sino el paso previo en la pagina del negocio.</li>
+            <li>Aunque el checkout real sea seguro, un tercero puede intentar desviar al cliente antes de que llegue a esa pasarela.</li>
+            <li>La correccion prioritaria es forzar <code>HTTP -&gt; HTTPS</code> y activar <code>HSTS</code>.</li>
+          </ul>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

@@ -46,6 +46,12 @@ export type ControllerPayload = {
   unitId?: number;
   probe1?: number;
   probe2?: number;
+  alertConfig?: {
+    enabled?: boolean;
+    minTemperature?: number;
+    maxTemperature?: number;
+    offlineAfterMs?: number;
+  };
   registerDefinitions?: RegisterDefinitionPayload[];
 };
 
@@ -135,6 +141,17 @@ export async function resetApiBaseUrl() {
   return DEFAULT_API_BASE_URL;
 }
 
+export async function getControllerWebSocketUrl(controllerId: string, authToken: string) {
+  const baseUrl = await getApiBaseUrl();
+  const wsBaseUrl = baseUrl.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:");
+  const params = new URLSearchParams({
+    controllerId: String(controllerId ?? "").trim(),
+    token: String(authToken ?? "").trim(),
+  });
+
+  return `${wsBaseUrl}/ws/controllers?${params.toString()}`;
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const baseUrl = await getApiBaseUrl();
   const url = `${baseUrl}${path}`;
@@ -211,6 +228,17 @@ export function createController(payload: ControllerPayload, authToken: string) 
   return request<{ controller: any }>("/api/controllers", { method: "POST", body: payload, authToken });
 }
 
+export function createAdminController(
+  payload: ControllerPayload & { ownerId: string },
+  authToken: string
+) {
+  return request<{ controller: any }>("/api/admin/controllers", {
+    method: "POST",
+    body: payload,
+    authToken,
+  });
+}
+
 export function deleteController(controllerId: string, authToken: string) {
   return request<{ message: string; controller: any }>(`/api/controllers/${controllerId}`, {
     method: "DELETE",
@@ -230,11 +258,109 @@ export function fetchController(controllerId: string, authToken: string) {
   });
 }
 
+export function fetchAdminUsers(authToken: string) {
+  return request<{ users: any[] }>("/api/admin/users", {
+    method: "GET",
+    authToken,
+    timeoutMs: 15000,
+  });
+}
+
+export function updateAdminUser(
+  userId: string,
+  payload: { fullName: string; role: "admin" | "technician" | "viewer"; isActive: boolean },
+  authToken: string
+) {
+  return request<{ user: any }>(`/api/admin/users/${userId}`, {
+    method: "PUT",
+    body: payload,
+    authToken,
+  });
+}
+
+export function fetchAdminController(controllerId: string, authToken: string) {
+  return request<{ controller: any }>(`/api/admin/controllers/${controllerId}`, {
+    method: "GET",
+    authToken,
+  });
+}
+
+export function updateAdminControllerRegisterDefinitions(
+  controllerId: string,
+  registerDefinitions: RegisterDefinitionPayload[],
+  authToken: string
+) {
+  return request<{ registerDefinitions: RegisterDefinitionPayload[] }>(
+    `/api/admin/controllers/${controllerId}/register-definitions`,
+    {
+      method: "PUT",
+      body: { registerDefinitions },
+      authToken,
+    }
+  );
+}
+
+export function updateAdminControllerAlertConfig(
+  controllerId: string,
+  payload: {
+    enabled?: boolean;
+    minTemperature?: number | null;
+    maxTemperature?: number | null;
+    offlineAfterMs?: number | null;
+  },
+  authToken: string
+) {
+  return request<any>(`/api/admin/controllers/${controllerId}/alert-config`, {
+    method: "PUT",
+    body: payload,
+    authToken,
+  });
+}
+
+export function updateAdminControllerConnectionConfig(
+  controllerId: string,
+  payload: {
+    name?: string;
+    elfinId?: string;
+    gatewayMode?: "direct" | "agent-mqtt" | "elfin-mqtt" | "tcp-client";
+    ipAddress?: string;
+    modbusPort?: number;
+    unitId?: number;
+    baudRate?: number;
+    probe1?: number;
+    probe2?: number;
+    location?: string;
+  },
+  authToken: string
+) {
+  return request<any>(`/api/admin/controllers/${controllerId}/connection-config`, {
+    method: "PUT",
+    body: payload,
+    authToken,
+  });
+}
+
 export function fetchDeviceModels() {
   return request<{ models: any[] }>("/api/device-models");
 }
 
 export const fetchDixellModels = fetchDeviceModels;
+
+export function createDeviceModel(payload: any, authToken: string) {
+  return request<{ model: any }>("/api/device-models", {
+    method: "POST",
+    body: payload,
+    authToken,
+  });
+}
+
+export function updateDeviceModel(modelId: string, payload: any, authToken: string) {
+  return request<{ model: any }>(`/api/device-models/${modelId}`, {
+    method: "PUT",
+    body: payload,
+    authToken,
+  });
+}
 
 export function updateControllerSetpoint(controllerId: string, temperature: number, authToken: string) {
   return request<any>(`/api/controllers/${controllerId}/setpoint`, {
@@ -275,6 +401,23 @@ export function updateControllerConnectionConfig(
   authToken: string
 ) {
   return request<any>(`/api/controllers/${controllerId}/connection-config`, {
+    method: "PUT",
+    body: payload,
+    authToken,
+  });
+}
+
+export function updateControllerAlertConfig(
+  controllerId: string,
+  payload: {
+    enabled?: boolean;
+    minTemperature?: number | null;
+    maxTemperature?: number | null;
+    offlineAfterMs?: number | null;
+  },
+  authToken: string
+) {
+  return request<any>(`/api/controllers/${controllerId}/alert-config`, {
     method: "PUT",
     body: payload,
     authToken,

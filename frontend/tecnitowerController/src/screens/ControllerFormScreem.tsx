@@ -15,12 +15,13 @@ import {
   Platform,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import { ArrowLeft, Cpu, Globe, Hash, Info } from 'lucide-react-native';
-import { createController, fetchDeviceModels } from '../services/api';
+import { ArrowLeft, BellRing, Cpu, Hash, Info } from 'lucide-react-native';
+import { createAdminController, createController, fetchDeviceModels } from '../services/api';
 import { AuthSession } from '../types/auth';
 
 type Props = {
   navigation: any;
+  route: any;
   session: AuthSession;
 };
 
@@ -44,7 +45,10 @@ function getRecommendedConnectionDefaults(model: any, fallback: { unitId: string
   };
 }
 
-function ControllerFormScreen({ navigation, session }: Props) {
+function ControllerFormScreen({ navigation, route, session }: Props) {
+  const adminOwnerId = route?.params?.ownerId ? String(route.params.ownerId) : '';
+  const adminOwnerName = route?.params?.ownerName ? String(route.params.ownerName) : '';
+  const adminMode = Boolean(adminOwnerId && session?.user?.role === 'admin');
   const [name, setName] = useState('');
   const gatewayMode = 'tcp-client' as const;
   const [deviceModel, setDeviceModel] = useState('');
@@ -55,6 +59,10 @@ function ControllerFormScreen({ navigation, session }: Props) {
   const [baudRate, setBaudRate] = useState('9600');
   const [probe1, setProbe1] = useState('');
   const [probe2, setProbe2] = useState('');
+  const [alertsEnabled, setAlertsEnabled] = useState(true);
+  const [minTemperature, setMinTemperature] = useState('');
+  const [maxTemperature, setMaxTemperature] = useState('');
+  const [offlineAfterSeconds, setOfflineAfterSeconds] = useState('60');
   const [models, setModels] = useState<any[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -111,6 +119,9 @@ function ControllerFormScreen({ navigation, session }: Props) {
     const parsedBaudRate = parseOptionalNumber(baudRate);
     const parsedProbe1 = parseOptionalNumber(probe1);
     const parsedProbe2 = parseOptionalNumber(probe2);
+    const parsedMinTemperature = parseOptionalNumber(minTemperature);
+    const parsedMaxTemperature = parseOptionalNumber(maxTemperature);
+    const parsedOfflineAfterSeconds = parseOptionalNumber(offlineAfterSeconds);
     if (!parsedUnitId || parsedUnitId < 1 || parsedUnitId > 247) {
       setError('Unit ID debe estar entre 1 y 247.');
       return;
@@ -127,11 +138,34 @@ function ControllerFormScreen({ navigation, session }: Props) {
       setError('Probe 2 inválida.');
       return;
     }
+    if (minTemperature.trim() && parsedMinTemperature == null) {
+      setError('Temperatura mínima inválida.');
+      return;
+    }
+    if (maxTemperature.trim() && parsedMaxTemperature == null) {
+      setError('Temperatura máxima inválida.');
+      return;
+    }
+    if (
+      parsedMinTemperature != null &&
+      parsedMaxTemperature != null &&
+      parsedMinTemperature > parsedMaxTemperature
+    ) {
+      setError('La temperatura mínima no puede ser mayor que la máxima.');
+      return;
+    }
+    if (
+      offlineAfterSeconds.trim() &&
+      (parsedOfflineAfterSeconds == null || parsedOfflineAfterSeconds < 1)
+    ) {
+      setError('El tiempo sin comunicación debe ser al menos 1 segundo.');
+      return;
+    }
     setIsSubmitting(true);
     setError('');
 
     try {
-      await createController({
+      const payload = {
         name,
         gatewayMode,
         deviceBrand: deviceBrand.trim().toUpperCase() || undefined,
@@ -145,10 +179,29 @@ function ControllerFormScreen({ navigation, session }: Props) {
         baudRate: parsedBaudRate,
         probe1: parsedProbe1,
         probe2: parsedProbe2,
-      }, session.token);
+        alertConfig: {
+          enabled: alertsEnabled,
+          minTemperature: parsedMinTemperature,
+          maxTemperature: parsedMaxTemperature,
+          offlineAfterMs:
+            parsedOfflineAfterSeconds == null ? undefined : parsedOfflineAfterSeconds * 1000,
+        },
+      };
 
-      Alert.alert('Éxito', 'Controlador registrado correctamente.');
-      navigation.navigate('Home');
+      if (adminMode) {
+        await createAdminController(
+          {
+            ...payload,
+            ownerId: adminOwnerId,
+          },
+          session.token
+        );
+      } else {
+        await createController(payload, session.token);
+      }
+
+      Alert.alert('Éxito', adminMode ? 'Controlador asignado correctamente.' : 'Controlador registrado correctamente.');
+      navigation.navigate(adminMode ? 'AdminDashboard' : 'Home');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al guardar.');
     } finally {
@@ -185,7 +238,9 @@ function ControllerFormScreen({ navigation, session }: Props) {
             <View style={styles.formCard}>
               <View style={styles.cardHeader}>
                 <Cpu color="#001F7C" size={20} />
-                <Text style={styles.cardTitle}>Datos del Dispositivo</Text>
+                <Text style={styles.cardTitle}>
+                  {adminMode ? `Alta para ${adminOwnerName || 'usuario'}` : 'Datos del Dispositivo'}
+                </Text>
               </View>
 
               <InputField
@@ -241,6 +296,75 @@ function ControllerFormScreen({ navigation, session }: Props) {
                 value={baudRate}
                 onChangeText={setBaudRate}
                 placeholder="9600"
+                keyboardType="number-pad"
+              />
+
+              <View style={styles.sectionDivider} />
+
+              <View style={styles.cardHeader}>
+                <BellRing color="#001F7C" size={20} />
+                <Text style={styles.cardTitle}>Alertas Básicas</Text>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.toggleCard,
+                  alertsEnabled ? styles.toggleCardActive : undefined,
+                ]}
+                onPress={() => setAlertsEnabled((current) => !current)}
+              >
+                <View style={styles.toggleCopy}>
+                  <Text
+                    style={[
+                      styles.toggleTitle,
+                      alertsEnabled ? styles.toggleTitleActive : undefined,
+                    ]}
+                  >
+                    {alertsEnabled ? 'Alertas activas' : 'Alertas desactivadas'}
+                  </Text>
+                  <Text style={styles.toggleDescription}>
+                    Controla temperatura fuera de rango y equipo sin comunicación.
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.togglePill,
+                    alertsEnabled ? styles.togglePillActive : undefined,
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.toggleKnob,
+                      alertsEnabled ? styles.toggleKnobActive : undefined,
+                    ]}
+                  />
+                </View>
+              </TouchableOpacity>
+
+              <InputField
+                label="Temperatura mínima alerta (opcional)"
+                icon={<Info size={16} color="#64748B" />}
+                value={minTemperature}
+                onChangeText={setMinTemperature}
+                placeholder="Ej: -5"
+                keyboardType="numbers-and-punctuation"
+              />
+
+              <InputField
+                label="Temperatura máxima alerta (opcional)"
+                icon={<Info size={16} color="#64748B" />}
+                value={maxTemperature}
+                onChangeText={setMaxTemperature}
+                placeholder="Ej: 8"
+                keyboardType="numbers-and-punctuation"
+              />
+
+              <InputField
+                label="Segundos sin comunicación"
+                icon={<Hash size={16} color="#64748B" />}
+                value={offlineAfterSeconds}
+                onChangeText={setOfflineAfterSeconds}
+                placeholder="60"
                 keyboardType="number-pad"
               />
 
@@ -355,6 +479,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1E293B',
   },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+    marginVertical: 18,
+  },
   inputGroup: {
     marginBottom: 15,
   },
@@ -425,6 +554,59 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#64748B',
     lineHeight: 18,
+  },
+  toggleCard: {
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    backgroundColor: '#F8FAFC',
+    padding: 14,
+    marginBottom: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  toggleCardActive: {
+    borderColor: '#001F7C',
+    backgroundColor: '#EEF2FF',
+  },
+  toggleCopy: {
+    flex: 1,
+  },
+  toggleTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  toggleTitleActive: {
+    color: '#001F7C',
+  },
+  toggleDescription: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 18,
+  },
+  togglePill: {
+    width: 52,
+    height: 30,
+    borderRadius: 999,
+    backgroundColor: '#CBD5E1',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  togglePillActive: {
+    backgroundColor: '#001F7C',
+  },
+  toggleKnob: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FFFFFF',
+  },
+  toggleKnobActive: {
+    alignSelf: 'flex-end',
   },
   errorBadge: {
     backgroundColor: '#FEF2F2',

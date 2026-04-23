@@ -14,6 +14,7 @@ router.get("/:id", controllerController.getController);
 router.put("/:id/register-definitions", controllerController.updateControllerRegisterDefinitions);
 router.put("/:id/setpoint-config", controllerController.updateControllerSetpointConfig);
 router.put("/:id/connection-config", controllerController.updateControllerConnectionConfig);
+router.put("/:id/alert-config", controllerController.updateControllerAlertConfig);
 router.post("/:id/registers/write", controllerController.writeControllerRegister);
 router.post("/:id/setpoint", controllerController.setControllerSetpoint);
 router.post("/:id/setpoint-scan", controllerController.scanControllerSetpoint);

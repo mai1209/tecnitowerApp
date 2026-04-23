@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>11 Espacio Holistico | Demo de Riesgo HTTP</title>
+    <style>
+      :root {
+        --paper: rgba(255, 251, 244, 0.84);
+        --paper-2: rgba(255, 255, 255, 0.74);
+        --ink: #312a21;
+        --muted: #6d6256;
+        --accent: #6f7f63;
+        --accent-2: #b8794b;
+        --safe: #5b7354;
+        --danger: #a34b45;
+        --border: rgba(49, 42, 33, 0.1);
+        --shadow: 0 26px 90px rgba(79, 63, 47, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Avenir Next", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(111, 127, 99, 0.22), transparent 28%),
+          radial-gradient(circle at bottom right, rgba(184, 121, 75, 0.18), transparent 26%),
+          linear-gradient(180deg, #fffaf2 0%, #efe4d5 100%);
+      }
+
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 48px 20px 64px;
+      }
+
+      .hero,
+      .panel {
+        background: var(--paper);
+        backdrop-filter: blur(14px);
+        border: 1px solid var(--border);
+        border-radius: 28px;
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        padding: 30px;
+      }
+
+      .topbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+
+      .topbar span {
+        display: inline-flex;
+        align-items: center;
+        min-height: 34px;
+        padding: 0 12px;
+        border-radius: 999px;
+        color: var(--muted);
+        background: rgba(49, 42, 33, 0.05);
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .evidence {
+        margin-top: 18px;
+        padding: 18px 20px;
+        border-radius: 20px;
+        background: rgba(111, 127, 99, 0.08);
+        border: 1px solid rgba(111, 127, 99, 0.16);
+      }
+
+      .evidence strong {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 15px;
+      }
+
+      .evidence p + p {
+        margin-top: 8px;
+      }
+
+      .badge-safe,
+      .badge-danger {
+        display: inline-flex;
+        align-items: center;
+        padding: 8px 14px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .badge-safe {
+        color: var(--safe);
+        background: rgba(22, 101, 52, 0.12);
+      }
+
+      .badge-danger {
+        color: var(--danger);
+        background: rgba(185, 28, 28, 0.12);
+      }
+
+      h1 {
+        margin: 18px 0 12px;
+        font-size: clamp(38px, 8vw, 74px);
+        line-height: 0.94;
+        letter-spacing: -0.04em;
+        font-family: Georgia, "Times New Roman", serif;
+        font-weight: 600;
+      }
+
+      .eyebrow {
+        color: var(--accent-2);
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .subhead {
+        margin-top: 10px;
+        max-width: 620px;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 18px;
+        line-height: 1.6;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 18px;
+        margin-top: 24px;
+      }
+
+      .card {
+        padding: 22px;
+        border-radius: 22px;
+        background: var(--paper-2);
+        border: 1px solid var(--border);
+      }
+
+      .card h2 {
+        margin: 0 0 8px;
+        font-size: 18px;
+      }
+
+      .link {
+        display: inline-flex;
+        margin-top: 14px;
+        color: var(--accent);
+        font-weight: 700;
+        text-decoration: none;
+        word-break: break-word;
+      }
+
+      .panel {
+        margin-top: 22px;
+        padding: 24px;
+      }
+
+      .alert-safe,
+      .alert-danger {
+        margin-top: 18px;
+        padding: 14px 16px;
+        border-radius: 16px;
+        font-weight: 600;
+      }
+
+      .alert-safe {
+        color: var(--safe);
+        background: rgba(22, 101, 52, 0.09);
+      }
+
+      .alert-danger {
+        color: var(--danger);
+        background: rgba(185, 28, 28, 0.09);
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 26px;
+      }
+
+      .button,
+      .button-alt {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 48px;
+        padding: 0 18px;
+        border-radius: 999px;
+        text-decoration: none;
+        font-weight: 700;
+      }
+
+      .button {
+        color: white;
+        background: linear-gradient(135deg, var(--accent), #58694c);
+      }
+
+      .button-alt {
+        color: var(--ink);
+        background: rgba(49, 42, 33, 0.06);
+      }
+
+      .caption {
+        margin-top: 14px;
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      .session-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 20px;
+      }
+
+      .session-meta span {
+        display: inline-flex;
+        align-items: center;
+        min-height: 40px;
+        padding: 0 14px;
+        border-radius: 999px;
+        background: rgba(111, 127, 99, 0.08);
+        color: var(--ink);
+        font-weight: 700;
+      }
+
+      .compare {
+        margin-top: 24px;
+        padding: 18px;
+        border-radius: 18px;
+        background: rgba(49, 42, 33, 0.04);
+      }
+
+      .brandline {
+        margin-top: 18px;
+        font-size: 15px;
+      }
+
+      .demo-note {
+        margin-top: 18px;
+        padding: 16px 18px;
+        border-radius: 18px;
+        background: rgba(184, 121, 75, 0.08);
+      }
+
+      code {
+        padding: 2px 6px;
+        border-radius: 8px;
+        background: rgba(49, 42, 33, 0.06);
+        font-family: ui-monospace, "SFMono-Regular", monospace;
+        font-size: 0.95em;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero">
+        <div class="topbar">
+          <span>Sesiones</span>
+          <span>Resenas</span>
+          <span>Donde estamos</span>
+          <span>WhatsApp</span>
+        </div>
+        <span class="badge-danger">Version alterada en transito</span>
+        <h1>11 Espacio Holistico</h1>
+        <div class="eyebrow">Tu cuerpo recuerda lo que la mente olvida</div>
+        <p class="subhead">Esta vista controlada muestra como la misma reserva podria verse distinta si un tercero altera la respuesta antes de que llegue al navegador del cliente.</p>
+        <div class="session-meta">
+          <span>Masaje Kundalini · 80 EUR / sesion</span>
+          <span>Pago paso 3 de 3</span>
+          <span>Reserva confirmada hoy</span>
+        </div>
+        <div class="evidence">
+          <strong>Relacion directa con el sitio real</strong>
+          <p>En <code>11espacioholistico.com</code> se observo que <code>http://</code> responde <code>200 OK</code> en lugar de redirigir a <code>https://</code>.</p>
+          <p>Esta pantalla muestra una version demostrativa del mismo flujo para explicar que tipo de cambios visibles podria recibir un cliente si entra por HTTP.</p>
+        </div>
+        <div class="alert-danger">Cambios demostrativos: se alteraron el destino de pago, el WhatsApp y el email sin tocar el servidor original.</div>
+        <div class="actions">
+          <a class="button" href="https://checkout-reservas.example/orden-118" target="_blank" rel="noreferrer">Confirmar reserva ahora</a>
+          <a class="button-alt" href="./index.html">Volver a la comparacion</a>
+        </div>
+        <p class="caption">En un escenario real, un usuario solo veria una de estas respuestas y asumiria que es la legitima.</p>
+        <p class="brandline">Demostracion inspirada en la identidad comercial del sitio, sin copiar ni tocar su codigo.</p>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <h2>Pago de la reserva</h2>
+          <p>El boton apunta a un destino distinto y el texto mete urgencia para bajar la verificacion del cliente.</p>
+          <a class="link" href="https://checkout-reservas.example/orden-118" target="_blank" rel="noreferrer">https://checkout-reservas.example/orden-118</a>
+        </article>
+        <article class="card">
+          <h2>WhatsApp</h2>
+          <p>Este es el contacto que veria el cliente si toca el acceso rapido desde la pagina.</p>
+          <a class="link" href="https://wa.me/34600999000" target="_blank" rel="noreferrer">WhatsApp soporte</a>
+        </article>
+        <article class="card">
+          <h2>Email</h2>
+          <p>Si el correo cambia en la pagina, el cliente puede mandar datos o comprobantes al destinatario equivocado.</p>
+          <a class="link" href="mailto:cobros@espacio-holistico.example">cobros@espacio-holistico.example</a>
+        </article>
+      </section>
+
+      <section class="panel">
+        <strong>Que demuestra esta pantalla</strong>
+        <div class="compare">
+          <p>La demo no intercepta trafico ni toca un sitio real. Solo enseña el tipo de cambio visible que un atacante podria introducir cuando una pagina se sirve por <code>http://</code> sin forzar <code>https://</code>.</p>
+        </div>
+        <div class="demo-note">
+          <p>La idea para el cliente es simple: aunque SumUp sea seguro, el riesgo aparece antes, cuando la persona todavia esta viendo la pagina del negocio y decide a donde hacer clic.</p>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tecnitower Admin</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <section id="loginView" class="auth-shell">
+        <div class="auth-card">
+          <p class="eyebrow">Tecnitower</p>
+          <h1>Panel administrador</h1>
+          <p class="muted">
+            Gestión técnica de usuarios, controladores, alertas y registros dinámicos.
+          </p>
+          <form id="loginForm" class="auth-form">
+            <label>
+              <span>Email</span>
+              <input id="loginEmail" type="email" placeholder="admin@admin.com" required />
+            </label>
+            <label>
+              <span>Contraseña</span>
+              <input id="loginPassword" type="password" placeholder="••••••••" required />
+            </label>
+            <button id="loginButton" type="submit">Ingresar</button>
+          </form>
+          <p id="loginError" class="error-text hidden"></p>
+        </div>
+      </section>
+
+      <section id="adminView" class="admin-shell hidden">
+        <aside class="sidebar">
+          <div class="brand-block">
+            <p class="eyebrow">Tecnitower</p>
+            <h2>Admin web</h2>
+            <p class="muted small">Mismo backend, misma base, separado de la app cliente.</p>
+          </div>
+
+          <nav class="nav">
+            <button class="nav-link active" data-section="overview">Resumen</button>
+            <button class="nav-link" data-section="users">Usuarios</button>
+            <button class="nav-link" data-section="models">Modelos</button>
+          </nav>
+
+          <div class="session-box">
+            <p id="sessionUser" class="session-user">-</p>
+            <p id="sessionRole" class="session-role">-</p>
+            <button id="logoutButton" class="ghost-button">Cerrar sesión</button>
+          </div>
+        </aside>
+
+        <main class="content">
+          <header class="topbar">
+            <div>
+              <h1>Panel administrador</h1>
+              <p class="muted">
+                Usuarios, controladores, estados, alertas y registros visibles/editables.
+              </p>
+            </div>
+            <button id="reloadButton" class="ghost-button">Actualizar</button>
+          </header>
+
+          <section id="errorBanner" class="banner error hidden"></section>
+          <section id="successBanner" class="banner success hidden"></section>
+
+          <section id="overviewSection" class="section">
+            <div class="metrics-grid">
+              <article class="metric-card">
+                <span>Usuarios</span>
+                <strong id="metricUsers">0</strong>
+              </article>
+              <article class="metric-card">
+                <span>Controladores</span>
+                <strong id="metricControllers">0</strong>
+              </article>
+              <article class="metric-card">
+                <span>Online</span>
+                <strong id="metricOnline">0</strong>
+              </article>
+              <article class="metric-card">
+                <span>Alertas activas</span>
+                <strong id="metricAlerts">0</strong>
+              </article>
+            </div>
+          </section>
+
+          <section id="usersSection" class="section hidden">
+            <div id="usersList" class="stack"></div>
+          </section>
+
+          <section id="modelsSection" class="section hidden">
+            <div class="panel">
+              <div class="panel-header">
+                <div>
+                  <h3>Alta de modelo</h3>
+                  <p class="muted">
+                    Base técnica para múltiples controladores. Esto alimenta los formularios y permisos del cliente.
+                  </p>
+                </div>
+              </div>
+              <form id="modelForm" class="stack">
+                <input id="modelId" type="hidden" />
+                <div class="form-grid form-grid-3">
+                  <label>
+                    <span>Marca</span>
+                    <input id="modelBrand" type="text" placeholder="FULL GAUGE" value="DIXELL" />
+                  </label>
+                  <label>
+                    <span>Nombre</span>
+                    <input id="modelName" type="text" placeholder="TC900E LOG" required />
+                  </label>
+                  <label>
+                    <span>Protocolo</span>
+                    <select id="modelProtocol">
+                      <option value="tcp-client">tcp-client</option>
+                      <option value="modbus-tcp">modbus-tcp</option>
+                      <option value="modbus-rtu">modbus-rtu</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Connection type</span>
+                    <select id="modelConnectionType">
+                      <option value="serial">serial</option>
+                      <option value="tcp">tcp</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Unit ID default</span>
+                    <input id="modelDefaultUnitId" type="number" min="1" max="247" value="1" />
+                  </label>
+                  <label>
+                    <span>Puerto Modbus</span>
+                    <input id="modelDefaultModbusPort" type="number" min="1" max="65535" value="502" />
+                  </label>
+                  <label>
+                    <span>Baudrate</span>
+                    <input id="modelDefaultBaudRate" type="number" min="1200" step="1" value="9600" />
+                  </label>
+                  <label>
+                    <span>Data bits</span>
+                    <input id="modelDefaultDataBits" type="number" min="5" max="8" step="1" value="8" />
+                  </label>
+                  <label>
+                    <span>Parity</span>
+                    <select id="modelDefaultParity">
+                      <option value="none">none</option>
+                      <option value="even">even</option>
+                      <option value="odd">odd</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Stop bits</span>
+                    <input id="modelDefaultStopBits" type="number" min="1" max="2" step="1" value="1" />
+                  </label>
+                  <label>
+                    <span>Probe 1 default</span>
+                    <input id="modelDefaultProbe1" type="number" min="0" step="1" />
+                  </label>
+                  <label>
+                    <span>Probe 2 default</span>
+                    <input id="modelDefaultProbe2" type="number" min="0" step="1" />
+                  </label>
+                  <label>
+                    <span>Setpoint register</span>
+                    <input id="modelSetpointRegister" type="number" min="0" step="1" />
+                  </label>
+                  <label>
+                    <span>Setpoint read register</span>
+                    <input id="modelSetpointReadRegister" type="number" min="0" step="1" />
+                  </label>
+                  <label>
+                    <span>Setpoint verify register</span>
+                    <input id="modelSetpointVerifyRegister" type="number" min="0" step="1" />
+                  </label>
+                  <label>
+                    <span>Setpoint min</span>
+                    <input id="modelSetpointMin" type="number" step="0.1" />
+                  </label>
+                  <label>
+                    <span>Setpoint max</span>
+                    <input id="modelSetpointMax" type="number" step="0.1" />
+                  </label>
+                  <label>
+                    <span>Setpoint scale</span>
+                    <input id="modelSetpointScale" type="number" min="1" step="1" value="10" />
+                  </label>
+                </div>
+                <label>
+                  <span>Descripción</span>
+                  <input id="modelDescription" type="text" placeholder="Descripción técnica del modelo" />
+                </label>
+                <label>
+                  <span>Notas</span>
+                  <input id="modelNotes" type="text" placeholder="Notas internas / referencia del manual" />
+                </label>
+                <section class="panel panel-soft">
+                  <div class="panel-header inline">
+                    <div>
+                      <h4>Plantilla de registros</h4>
+                      <p class="muted small">
+                        Esto reemplaza la carga manual por controlador. Después se reutiliza en todas las instalaciones del mismo modelo.
+                      </p>
+                    </div>
+                    <div class="actions-row compact">
+                      <input id="modelCsvInput" type="file" accept=".csv,text/csv" class="hidden" />
+                      <button id="importModelCsvButton" type="button" class="ghost-button">Importar CSV</button>
+                      <button id="exportModelCsvButton" type="button" class="ghost-button">Exportar CSV</button>
+                      <button id="addModelRegisterButton" type="button" class="ghost-button">Agregar registro</button>
+                    </div>
+                  </div>
+                  <div id="modelRegisterRows" class="register-stack"></div>
+                </section>
+                <div class="actions-row">
+                  <button id="cancelEditModelButton" type="button" class="ghost-button hidden">Cancelar edición</button>
+                  <button id="saveModelButton" type="submit" class="primary-button">Guardar modelo</button>
+                </div>
+              </form>
+            </div>
+
+            <div class="panel">
+              <div class="panel-header">
+                <div>
+                  <h3>Modelos cargados</h3>
+                  <p class="muted">
+                    Esta lista sirve como base de plantillas técnicas. La importación/exportación masiva va en la siguiente etapa.
+                  </p>
+                </div>
+              </div>
+              <div id="modelsList" class="models-grid"></div>
+            </div>
+          </section>
+        </main>
+
+        <aside id="editorDrawer" class="drawer hidden">
+          <div class="drawer-header">
+            <div>
+              <p class="eyebrow">Controlador</p>
+              <h3 id="drawerTitle">-</h3>
+              <p id="drawerSubtitle" class="muted small">-</p>
+            </div>
+            <button id="closeDrawerButton" class="icon-button">×</button>
+          </div>
+
+          <div class="drawer-body">
+            <section class="panel">
+              <h4>Configuración base</h4>
+              <div class="form-grid">
+                <label>
+                  <span>Nombre</span>
+                  <input id="controllerName" type="text" />
+                </label>
+                <label>
+                  <span>Elfin ID</span>
+                  <input id="controllerElfinId" type="text" />
+                </label>
+                <label>
+                  <span>Gateway mode</span>
+                  <select id="controllerGatewayMode">
+                    <option value="tcp-client">tcp-client</option>
+                    <option value="agent-mqtt">agent-mqtt</option>
+                    <option value="elfin-mqtt">elfin-mqtt</option>
+                    <option value="direct">direct</option>
+                  </select>
+                </label>
+                <label>
+                  <span>IP local</span>
+                  <input id="controllerIpAddress" type="text" placeholder="192.168.x.x" />
+                </label>
+                <label>
+                  <span>Puerto Modbus</span>
+                  <input id="controllerModbusPort" type="number" min="1" max="65535" step="1" />
+                </label>
+                <label>
+                  <span>Unit ID</span>
+                  <input id="controllerUnitId" type="number" min="1" max="247" step="1" />
+                </label>
+                <label>
+                  <span>Baud rate</span>
+                  <input id="controllerBaudRate" type="number" min="1200" step="1" />
+                </label>
+                <label>
+                  <span>Probe 1</span>
+                  <input id="controllerProbe1" type="number" min="0" step="1" />
+                </label>
+                <label>
+                  <span>Probe 2</span>
+                  <input id="controllerProbe2" type="number" min="0" step="1" />
+                </label>
+                <label>
+                  <span>Ubicación</span>
+                  <input id="controllerLocation" type="text" />
+                </label>
+              </div>
+            </section>
+
+            <section class="panel">
+              <h4>Alertas</h4>
+              <div class="form-grid">
+                <label class="toggle-row">
+                  <span>Alertas activas</span>
+                  <input id="alertEnabled" type="checkbox" />
+                </label>
+                <label>
+                  <span>Mínima</span>
+                  <input id="alertMin" type="number" step="0.1" placeholder="-5" />
+                </label>
+                <label>
+                  <span>Máxima</span>
+                  <input id="alertMax" type="number" step="0.1" placeholder="8" />
+                </label>
+                <label>
+                  <span>Offline (segundos)</span>
+                  <input id="alertOffline" type="number" min="1" step="1" placeholder="60" />
+                </label>
+              </div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header inline">
+                <div>
+                  <h4>Registros visibles/editables</h4>
+                  <p class="muted small">
+                    Lo que se cargue acá define lo que después puede ver o tocar el cliente en la app.
+                  </p>
+                </div>
+                <button id="addRegisterButton" class="ghost-button">Agregar registro</button>
+              </div>
+              <div id="registerRows" class="register-stack"></div>
+            </section>
+          </div>
+
+          <div class="drawer-footer">
+            <button id="saveControllerButton" class="primary-button">Guardar cambios</button>
+          </div>
+        </aside>
+      </section>
+    </div>
+
+    <script src="./app.js" defer></script>
+  </body>
+</html>

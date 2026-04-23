@@ -6,13 +6,14 @@ type Props = {
   navigation: any;
   children: React.ReactNode;
   onLogout?: () => void;
+  session?: any;
 };
 
-export default function AppLayout({ navigation, children, onLogout }: Props) {
+export default function AppLayout({ navigation, children, onLogout, session }: Props) {
   return (
     <View style={styles.root}>
       <View style={styles.content}>{children}</View>
-      <SideNav navigation={navigation} onLogout={onLogout} />
+      <SideNav navigation={navigation} onLogout={onLogout} session={session} />
     </View>
   );
 }

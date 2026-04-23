@@ -8,6 +8,7 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "agent:local": "node scripts/local-mqtt-agent.js",
+    "user:ensure-admin": "node scripts/ensure-admin-user.js",
     "user:reset-password": "node scripts/reset-user-password.js",
     "seed:dixell-models": "node scripts/seed-dixell-models.js",
     "migrate:controller-setpoints": "node scripts/migrate-controller-setpoints.js"
@@ -24,7 +25,8 @@
     "modbus-serial": "^8.0.23",
     "mongodb": "^7.1.0",
     "mongoose": "^9.1.5",
-    "mqtt": "^5.3.5"
+    "mqtt": "^5.3.5",
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.11"
