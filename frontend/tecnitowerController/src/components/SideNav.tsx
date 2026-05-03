@@ -19,6 +19,7 @@ import {
   Menu, 
   ShieldUser,
   Plus,
+  Settings,
 } from "lucide-react-native";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -29,7 +30,8 @@ type SideNavProps = {
   onLogout?: () => void;
   session?: {
     user?: {
-      role?: "admin" | "technician" | "viewer";
+      role?: "admin" | "user";
+      canWrite?: boolean;
     };
   } | null;
 };
@@ -45,11 +47,12 @@ type SideNavItem = {
 export default function SideNav({ navigation, onLogout, session }: SideNavProps) {
   const [open, setOpen] = useState(false);
   const isAdmin = session?.user?.role === "admin";
+  const canWrite = session?.user?.role === "admin" || session?.user?.canWrite === true;
 
   const items = useMemo(
     (): SideNavItem[] =>
       [
-        !isAdmin
+        !isAdmin && canWrite
           ? {
               key: "controller-form",
               label: "Agregar controlador",
@@ -61,8 +64,8 @@ export default function SideNav({ navigation, onLogout, session }: SideNavProps)
         isAdmin
           ? {
               key: "admin-dashboard",
-              label: "Panel administrador",
-              hint: "Usuarios, controladores y permisos",
+              label: "Lista de usuarios",
+              hint: "Usuarios registrados y sus controladores",
               icon: ShieldUser,
               action: () => navigation.navigate("AdminDashboard"),
             }
@@ -70,12 +73,19 @@ export default function SideNav({ navigation, onLogout, session }: SideNavProps)
         isAdmin
           ? {
               key: "device-models",
-              label: "Parámetros generales",
-              hint: "Modelos y registros por equipo",
+              label: "Carga de modelos y registros",
+              hint: "Configuración general por modelo",
               icon: Layers3,
               action: () => navigation.navigate("DeviceModelAdmin"),
             }
           : null,
+        {
+          key: "settings",
+          label: "Ajustes",
+          hint: "Cuenta, soporte y seguridad",
+          icon: Settings,
+          action: () => navigation.navigate("Settings"),
+        },
         {
           key: "manual",
           label: "Manual técnico",
@@ -84,7 +94,7 @@ export default function SideNav({ navigation, onLogout, session }: SideNavProps)
           action: () => navigation.navigate("Manual"),
         },
       ].filter((item): item is SideNavItem => Boolean(item)),
-    [isAdmin, navigation]
+    [canWrite, isAdmin, navigation]
   );
 
   return (

@@ -3,6 +3,7 @@ import { ControllerModel } from "../models/Controller.js";
 import { ControllerReading } from "../models/ControllerReading.js";
 import { buildControllerRuntimeState } from "../services/controllerAlertService.js";
 import { publishControllerRealtime } from "../services/controllerRealtimeService.js";
+import { notifyControllerAlertTransition } from "../services/pushNotificationService.js";
 
 export let mqttClient = null;
 const pendingCommands = new Map();
@@ -149,6 +150,7 @@ async function handleMessage(topic, messageBuffer) {
     const controller = await ControllerModel.findOne({ elfinId });
     if (!controller) return;
 
+    const previousAlertState = controller?.alertState ?? null;
     const telemetry = buildTelemetry(payload, topic, controller);
     const runtimeState = buildControllerRuntimeState(controller, { telemetry });
     controller.lastTelemetry = telemetry;
@@ -163,6 +165,17 @@ async function handleMessage(topic, messageBuffer) {
       topic,
       receivedAt: telemetry.receivedAt,
     });
+
+    if (
+      Boolean(previousAlertState?.active) !== Boolean(runtimeState?.alertState?.active) ||
+      String(previousAlertState?.type ?? "") !== String(runtimeState?.alertState?.type ?? "")
+    ) {
+      await notifyControllerAlertTransition({
+        controller,
+        previousAlertState,
+        nextAlertState: runtimeState?.alertState ?? null,
+      });
+    }
 
     publishControllerRealtime(controller._id, { reason: "mqtt-telemetry" });
   } catch (err) {

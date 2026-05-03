@@ -53,6 +53,24 @@ export type ControllerConnectionPayload = {
   location?: string;
 };
 
+export type AdminControllerCreatePayload = {
+  ownerId: string;
+  name: string;
+  gatewayMode?: string;
+  deviceBrand?: string;
+  deviceModel?: string;
+  deviceModelId?: string;
+  dixellModel?: string;
+  dixellModelId?: string;
+  elfinId: string;
+  ipAddress?: string;
+  unitId?: number;
+  baudRate?: number;
+  probe1?: number;
+  probe2?: number;
+  alertConfig?: AlertConfig;
+};
+
 type RequestOptions = {
   method?: string;
   token?: string | null;
@@ -115,6 +133,24 @@ export async function updateAdminUser(
 
 export async function fetchAdminController(token: string, controllerId: string) {
   return request<{ controller: AdminControllerDetail }>(`/api/admin/controllers/${controllerId}`, { token });
+}
+
+export async function createAdminController(token: string, body: AdminControllerCreatePayload) {
+  return request<{ controller: AdminControllerDetail }>("/api/admin/controllers", {
+    method: "POST",
+    token,
+    body,
+  });
+}
+
+export async function deleteAdminController(token: string, controllerId: string) {
+  return request<{ message: string; controller: { _id: string; name: string; elfinId: string } }>(
+    `/api/admin/controllers/${controllerId}`,
+    {
+      method: "DELETE",
+      token,
+    }
+  );
 }
 
 export async function updateAdminControllerConnection(

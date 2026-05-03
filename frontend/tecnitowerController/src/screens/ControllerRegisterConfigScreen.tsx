@@ -37,10 +37,69 @@ function blankDefinition() {
     max: "",
     writable: true,
     visible: true,
-    accessLevel: "user" as "user" | "technician",
     functionCode: "auto" as "auto" | "0x06" | "0x10",
     description: "",
   };
+}
+
+function mapDefinitionForForm(definition: any) {
+  return {
+    key: definition.key ?? "",
+    label: definition.label ?? "",
+    register: definition.register == null ? "" : String(definition.register),
+    verifyRegister: definition.verifyRegister == null ? "" : String(definition.verifyRegister),
+    scale: definition.scale == null ? "10" : String(definition.scale),
+    min: definition.min == null ? "" : String(definition.min),
+    max: definition.max == null ? "" : String(definition.max),
+    writable: definition.writable !== false,
+    visible: definition.visible !== false,
+    functionCode:
+      definition.functionCode === "0x06" || definition.functionCode === "0x10"
+        ? definition.functionCode
+        : "auto",
+    description: definition.description ?? "",
+  };
+}
+
+function buildPayloadDefinitions(definitions: any[]) {
+  return definitions
+    .map((definition, index) => {
+      const register = parseOptionalNumber(definition.register);
+      if (!definition.key.trim() || !definition.label.trim() || register == null) return null;
+      return {
+        key: definition.key.trim().toUpperCase(),
+        label: definition.label.trim(),
+        register,
+        verifyRegister: parseOptionalNumber(definition.verifyRegister) ?? undefined,
+        scale: parseOptionalNumber(definition.scale) ?? 10,
+        min: parseOptionalNumber(definition.min) ?? undefined,
+        max: parseOptionalNumber(definition.max) ?? undefined,
+        step: (parseOptionalNumber(definition.scale) ?? 10) === 10 ? 0.1 : 1,
+        dataType: "number",
+        writable: definition.writable,
+        visible: definition.visible,
+        functionCode: definition.functionCode,
+        description: definition.description?.trim() || undefined,
+        sortOrder: index,
+      };
+    })
+    .filter(Boolean);
+}
+
+function getFunctionCodeLabel(value: "auto" | "0x06" | "0x10") {
+  if (value === "0x06") return "0x06 · Escritura simple";
+  if (value === "0x10") return "0x10 · Escritura múltiple";
+  return "Automático";
+}
+
+function getFunctionCodeHelp(value: "auto" | "0x06" | "0x10") {
+  if (value === "0x06") {
+    return "Fuerza Modbus 0x06: escribe un solo registro. Útil si el equipo no acepta 0x10.";
+  }
+  if (value === "0x10") {
+    return "Fuerza Modbus 0x10: escritura múltiple. Algunos controladores la prefieren incluso para un solo valor.";
+  }
+  return "Prueba primero 0x10 y, si falla, hace fallback a 0x06 automáticamente.";
 }
 
 function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
@@ -66,11 +125,18 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
   const [probe2, setProbe2] = useState(controller?.probe2 == null ? "" : String(controller.probe2));
   const [location, setLocation] = useState(controller?.location ?? "");
   const [saving, setSaving] = useState(false);
-  const activeSection = adminMode ? String(section ?? "all") : "all";
+  const [expandedDefinitions, setExpandedDefinitions] = useState<boolean[]>([]);
+  const activeSection = String(section ?? "all");
   const showBaseSection = activeSection === "all" || activeSection === "base";
   const showNewParameterSection = activeSection === "all" || activeSection === "parameter-new";
   const showAlertsSection = activeSection === "all" || activeSection === "alerts";
   const showDefinitionsSection = activeSection === "all" || activeSection === "definitions";
+  const screenTitle =
+    activeSection === "alerts"
+      ? "Alertas del controlador"
+      : adminMode
+        ? "Configuración completa del controlador"
+        : "Parámetros dinámicos";
 
   useEffect(() => {
     async function loadController() {
@@ -79,25 +145,9 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
           ? await fetchAdminController(controller._id, session.token)
           : await fetchController(controller._id, session.token);
         const currentController = response.controller ?? {};
-        setDefinitions(
-          (currentController.registerDefinitions ?? []).map((definition: any) => ({
-            key: definition.key ?? "",
-            label: definition.label ?? "",
-            register: definition.register == null ? "" : String(definition.register),
-            verifyRegister:
-              definition.verifyRegister == null ? "" : String(definition.verifyRegister),
-            scale: definition.scale == null ? "10" : String(definition.scale),
-            min: definition.min == null ? "" : String(definition.min),
-            max: definition.max == null ? "" : String(definition.max),
-            writable: definition.writable !== false,
-            visible: definition.visible !== false,
-            accessLevel: definition.accessLevel === "technician" ? "technician" : "user",
-            functionCode:
-              definition.functionCode === "0x06" || definition.functionCode === "0x10"
-                ? definition.functionCode
-                : "auto",
-            description: definition.description ?? "",
-          }))
+        setDefinitions((currentController.registerDefinitions ?? []).map(mapDefinitionForForm));
+        setExpandedDefinitions(
+          new Array((currentController.registerDefinitions ?? []).length).fill(false)
         );
         setAlertsEnabled(currentController?.alertConfig?.enabled !== false);
         setMinTemperature(
@@ -132,7 +182,7 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
         setProbe1(currentController?.probe1 == null ? "" : String(currentController.probe1));
         setProbe2(currentController?.probe2 == null ? "" : String(currentController.probe2));
         setLocation(currentController?.location ?? "");
-      } catch (_) {}
+      } catch {}
     }
 
     loadController();
@@ -146,7 +196,7 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
     );
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     const numericRegister = parseOptionalNumber(newDefinition.register);
     if (!newDefinition.label.trim() || !newDefinition.key.trim() || numericRegister == null) {
       Alert.alert("Error", "Label, key y register son obligatorios");
@@ -159,31 +209,47 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
       return;
     }
 
-    setDefinitions((prev) => [
-      ...prev,
+    const nextDefinitions = [
+      ...definitions,
       {
         ...newDefinition,
         key: normalizedKey,
         label: newDefinition.label.trim(),
         register: String(numericRegister),
       },
-    ]);
-    setNewDefinition(blankDefinition());
+    ];
+
+    setSaving(true);
+    try {
+      const saveRegisterDefinitions = adminMode
+        ? updateAdminControllerRegisterDefinitions
+        : updateControllerRegisterDefinitions;
+      const response = await saveRegisterDefinitions(
+        controller._id,
+        buildPayloadDefinitions(nextDefinitions) as any[],
+        session.token
+      );
+      const persistedDefinitions = response?.registerDefinitions ?? [];
+      setDefinitions(persistedDefinitions.map(mapDefinitionForForm));
+      setExpandedDefinitions(new Array(persistedDefinitions.length).fill(false));
+      setNewDefinition(blankDefinition());
+      Alert.alert("OK", "Parámetro agregado");
+    } catch (error: any) {
+      Alert.alert("Error", error?.message || "No se pudo guardar el parámetro");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleRemove = (index: number) => {
     setDefinitions((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
+    setExpandedDefinitions((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
   };
 
-  const cycleAccess = (index: number) => {
-    setDefinitions((current) =>
-      current.map((definition, currentIndex) =>
-        currentIndex === index
-          ? {
-              ...definition,
-              accessLevel: definition.accessLevel === "user" ? "technician" : "user",
-            }
-          : definition
+  const toggleDefinitionExpanded = (index: number) => {
+    setExpandedDefinitions((current) =>
+      current.map((expanded, currentIndex) =>
+        currentIndex === index ? !expanded : expanded
       )
     );
   };
@@ -235,29 +301,7 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
       return;
     }
 
-    const payloadDefinitions = definitions
-      .map((definition, index) => {
-        const register = parseOptionalNumber(definition.register);
-        if (!definition.key.trim() || !definition.label.trim() || register == null) return null;
-        return {
-          key: definition.key.trim().toUpperCase(),
-          label: definition.label.trim(),
-          register,
-          verifyRegister: parseOptionalNumber(definition.verifyRegister) ?? undefined,
-          scale: parseOptionalNumber(definition.scale) ?? 10,
-          min: parseOptionalNumber(definition.min) ?? undefined,
-          max: parseOptionalNumber(definition.max) ?? undefined,
-          step: (parseOptionalNumber(definition.scale) ?? 10) === 10 ? 0.1 : 1,
-          dataType: "number",
-          writable: definition.writable,
-          visible: definition.visible,
-          accessLevel: definition.accessLevel,
-          functionCode: definition.functionCode,
-          description: definition.description?.trim() || undefined,
-          sortOrder: index,
-        };
-      })
-      .filter(Boolean);
+    const payloadDefinitions = buildPayloadDefinitions(definitions);
 
     const parsedUnitId = parseOptionalNumber(unitId);
     const parsedBaudRate = parseOptionalNumber(baudRate);
@@ -265,7 +309,7 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
     const parsedProbe2 = parseOptionalNumber(probe2);
     const parsedModbusPort = parseOptionalNumber(modbusPort);
 
-    if (adminMode) {
+    if (adminMode && showBaseSection) {
       if (!controllerName.trim() || !controllerElfinId.trim()) {
         Alert.alert("Error", "Nombre y Elfin ID son obligatorios");
         return;
@@ -293,22 +337,31 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
         ? updateAdminControllerAlertConfig
         : updateControllerAlertConfig;
 
-      const promises = [
-        saveRegisterDefinitions(controller._id, payloadDefinitions as any[], session.token),
-        saveAlertConfig(
-          controller._id,
-          {
-            enabled: alertsEnabled,
-            minTemperature: parsedMinTemperature,
-            maxTemperature: parsedMaxTemperature,
-            offlineAfterMs:
-              parsedOfflineAfterSeconds == null ? null : parsedOfflineAfterSeconds * 1000,
-          },
-          session.token
-        ),
-      ];
+      const promises: Promise<any>[] = [];
 
-      if (adminMode) {
+      if (showNewParameterSection || showDefinitionsSection || activeSection === "all") {
+        promises.push(
+          saveRegisterDefinitions(controller._id, payloadDefinitions as any[], session.token)
+        );
+      }
+
+      if (showAlertsSection) {
+        promises.push(
+          saveAlertConfig(
+            controller._id,
+            {
+              enabled: alertsEnabled,
+              minTemperature: parsedMinTemperature,
+              maxTemperature: parsedMaxTemperature,
+              offlineAfterMs:
+                parsedOfflineAfterSeconds == null ? null : parsedOfflineAfterSeconds * 1000,
+            },
+            session.token
+          )
+        );
+      }
+
+      if (adminMode && showBaseSection) {
         promises.push(
           updateAdminControllerConnectionConfig(
             controller._id,
@@ -330,7 +383,7 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
       }
 
       await Promise.all(promises);
-      Alert.alert("OK", "Configuración guardada");
+      Alert.alert("OK", activeSection === "alerts" ? "Alertas guardadas" : "Configuración guardada");
       navigation.goBack();
     } catch (error: any) {
       Alert.alert("Error", error?.message || "No se pudieron guardar los parámetros");
@@ -342,13 +395,13 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>
-        {adminMode ? "Admin: configuración completa del controlador" : "Parámetros dinámicos"}
+        {screenTitle}
       </Text>
       {adminMode && (
         <View style={styles.adminNotice}>
           <Text style={styles.adminNoticeTitle}>{controller?.name}</Text>
           <Text style={styles.adminNoticeText}>
-            Desde acá definís conexión, alertas y qué registros verá o modificará el cliente.
+            Desde acá definís la configuración de este controlador puntual del usuario: conexión, alertas y qué registros verá o podrá editar el cliente en su app.
           </Text>
         </View>
       )}
@@ -558,19 +611,6 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
         <TouchableOpacity
           style={styles.selector}
           onPress={() =>
-            setNewDefinition((current: ReturnType<typeof blankDefinition>) => ({
-              ...current,
-              accessLevel: current.accessLevel === "user" ? "technician" : "user",
-            }))
-          }
-        >
-          <Text style={styles.selectorLabel}>Access level</Text>
-          <Text style={styles.selectorValue}>{newDefinition.accessLevel}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.selector}
-          onPress={() =>
             setNewDefinition((current) => ({
               ...current,
               functionCode:
@@ -582,12 +622,22 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
             }))
           }
         >
-          <Text style={styles.selectorLabel}>Function code</Text>
-          <Text style={styles.selectorValue}>{newDefinition.functionCode}</Text>
+          <Text style={styles.selectorLabel}>Código de función</Text>
+          <Text style={styles.selectorValue}>
+            {getFunctionCodeLabel(newDefinition.functionCode)}
+          </Text>
+          <Text style={styles.selectorHelp}>
+            {getFunctionCodeHelp(newDefinition.functionCode)}
+          </Text>
         </TouchableOpacity>
 
         <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Visible en app cliente</Text>
+          <View style={styles.switchCopy}>
+            <Text style={styles.switchLabel}>Visible en app cliente</Text>
+            <Text style={styles.switchHelp}>
+              Si está activo, el cliente verá este parámetro en su panel.
+            </Text>
+          </View>
           <Switch
             value={newDefinition.visible}
             onValueChange={(value) =>
@@ -597,7 +647,12 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
         </View>
 
         <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Editable en app cliente</Text>
+          <View style={styles.switchCopy}>
+            <Text style={styles.switchLabel}>Editable en app cliente</Text>
+            <Text style={styles.switchHelp}>
+              Si está activo, el cliente podrá modificar este parámetro desde su app. Si está apagado, solo lo verá o quedará oculto según “Visible”.
+            </Text>
+          </View>
           <Switch
             value={newDefinition.writable}
             onValueChange={(value) =>
@@ -664,7 +719,7 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
 
         <FieldBlock
           label="Segundos sin comunicación"
-          help="Tiempo máximo antes de marcarlo offline."
+          help="Tiempo de tolerancia antes de marcarlo offline. Si el equipo vuelve a reportar dentro de ese plazo, no dispara alerta."
         >
           <TextInput
             style={styles.input}
@@ -679,82 +734,114 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
 
       {showDefinitionsSection && definitions.map((definition, index) => (
         <View key={`${definition.key}-${index}`} style={styles.definitionCard}>
-          <LabeledInput
-            label="Label"
-            value={definition.label}
-            onChangeText={(value) => updateDefinition(index, { label: value })}
-          />
-          <LabeledInput
-            label="Key"
-            value={definition.key}
-            onChangeText={(value) => updateDefinition(index, { key: value.toUpperCase() })}
-            autoCapitalize="characters"
-          />
-          <LabeledInput
-            label="Register"
-            value={definition.register}
-            onChangeText={(value) => updateDefinition(index, { register: value })}
-            keyboardType="number-pad"
-          />
-          <LabeledInput
-            label="Verify register"
-            value={definition.verifyRegister}
-            onChangeText={(value) => updateDefinition(index, { verifyRegister: value })}
-            keyboardType="number-pad"
-          />
-          <LabeledInput
-            label="Scale"
-            value={definition.scale}
-            onChangeText={(value) => updateDefinition(index, { scale: value })}
-            keyboardType="number-pad"
-          />
-          <LabeledInput
-            label="Min"
-            value={definition.min}
-            onChangeText={(value) => updateDefinition(index, { min: value })}
-            keyboardType="numbers-and-punctuation"
-          />
-          <LabeledInput
-            label="Max"
-            value={definition.max}
-            onChangeText={(value) => updateDefinition(index, { max: value })}
-            keyboardType="numbers-and-punctuation"
-          />
-          <LabeledInput
-            label="Descripción"
-            value={definition.description}
-            onChangeText={(value) => updateDefinition(index, { description: value })}
-          />
-
-          <TouchableOpacity style={styles.selector} onPress={() => cycleAccess(index)}>
-            <Text style={styles.selectorLabel}>Access level</Text>
-            <Text style={styles.selectorValue}>{definition.accessLevel}</Text>
+          <TouchableOpacity
+            style={styles.definitionHeader}
+            onPress={() => toggleDefinitionExpanded(index)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.definitionHeaderCopy}>
+              <Text style={styles.definitionHeaderTitle}>
+                {definition.label?.trim() || `Registro ${index + 1}`}
+              </Text>
+              <Text style={styles.definitionHeaderMeta}>
+                {definition.key?.trim() || "Sin key"} • Reg {definition.register || "-"}
+              </Text>
+            </View>
+            <Text style={styles.definitionHeaderAction}>
+              {expandedDefinitions[index] ? "Ocultar" : "Ver"}
+            </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.selector} onPress={() => cycleFunctionCode(index)}>
-            <Text style={styles.selectorLabel}>Function code</Text>
-            <Text style={styles.selectorValue}>{definition.functionCode}</Text>
-          </TouchableOpacity>
+          {expandedDefinitions[index] && (
+            <>
+              <LabeledInput
+                label="Label"
+                value={definition.label}
+                onChangeText={(value) => updateDefinition(index, { label: value })}
+              />
+              <LabeledInput
+                label="Key"
+                value={definition.key}
+                onChangeText={(value) => updateDefinition(index, { key: value.toUpperCase() })}
+                autoCapitalize="characters"
+              />
+              <LabeledInput
+                label="Register"
+                value={definition.register}
+                onChangeText={(value) => updateDefinition(index, { register: value })}
+                keyboardType="number-pad"
+              />
+              <LabeledInput
+                label="Verify register"
+                value={definition.verifyRegister}
+                onChangeText={(value) => updateDefinition(index, { verifyRegister: value })}
+                keyboardType="number-pad"
+              />
+              <LabeledInput
+                label="Scale"
+                value={definition.scale}
+                onChangeText={(value) => updateDefinition(index, { scale: value })}
+                keyboardType="number-pad"
+              />
+              <LabeledInput
+                label="Min"
+                value={definition.min}
+                onChangeText={(value) => updateDefinition(index, { min: value })}
+                keyboardType="numbers-and-punctuation"
+              />
+              <LabeledInput
+                label="Max"
+                value={definition.max}
+                onChangeText={(value) => updateDefinition(index, { max: value })}
+                keyboardType="numbers-and-punctuation"
+              />
+              <LabeledInput
+                label="Descripción"
+                value={definition.description}
+                onChangeText={(value) => updateDefinition(index, { description: value })}
+              />
 
-          <View style={styles.switchRow}>
-            <Text style={styles.switchLabel}>Visible</Text>
-            <Switch
-              value={definition.visible}
-              onValueChange={(value) => updateDefinition(index, { visible: value })}
-            />
-          </View>
+              <TouchableOpacity style={styles.selector} onPress={() => cycleFunctionCode(index)}>
+                <Text style={styles.selectorLabel}>Código de función</Text>
+                <Text style={styles.selectorValue}>
+                  {getFunctionCodeLabel(definition.functionCode)}
+                </Text>
+                <Text style={styles.selectorHelp}>
+                  {getFunctionCodeHelp(definition.functionCode)}
+                </Text>
+              </TouchableOpacity>
 
-          <View style={styles.switchRow}>
-            <Text style={styles.switchLabel}>Editable</Text>
-            <Switch
-              value={definition.writable}
-              onValueChange={(value) => updateDefinition(index, { writable: value })}
-            />
-          </View>
+              <View style={styles.switchRow}>
+                <View style={styles.switchCopy}>
+                  <Text style={styles.switchLabel}>Visible en app cliente</Text>
+                  <Text style={styles.switchHelp}>
+                    Si está activo, el cliente verá este parámetro en su app.
+                  </Text>
+                </View>
+                <Switch
+                  value={definition.visible}
+                  onValueChange={(value) => updateDefinition(index, { visible: value })}
+                />
+              </View>
 
-          <TouchableOpacity onPress={() => handleRemove(index)}>
-            <Text style={styles.removeText}>Quitar</Text>
-          </TouchableOpacity>
+              <View style={styles.switchRow}>
+                <View style={styles.switchCopy}>
+                  <Text style={styles.switchLabel}>Editable en app cliente</Text>
+                  <Text style={styles.switchHelp}>
+                    Si está activo, el cliente podrá editar este valor desde su app.
+                  </Text>
+                </View>
+                <Switch
+                  value={definition.writable}
+                  onValueChange={(value) => updateDefinition(index, { writable: value })}
+                />
+              </View>
+
+              <TouchableOpacity onPress={() => handleRemove(index)}>
+                <Text style={styles.removeText}>Quitar</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       ))}
 
@@ -839,6 +926,37 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   formCard: { backgroundColor: "#FFF", borderRadius: 20, padding: 16, marginBottom: 20 },
+  definitionCard: {
+    backgroundColor: "#FFF",
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  definitionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  definitionHeaderCopy: {
+    flex: 1,
+  },
+  definitionHeaderTitle: {
+    color: "#111827",
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 2,
+  },
+  definitionHeaderMeta: {
+    color: "#64748B",
+    fontSize: 12,
+  },
+  definitionHeaderAction: {
+    color: "#001F7C",
+    fontWeight: "800",
+  },
   formTitle: { fontSize: 18, fontWeight: "800", color: "#111827", marginBottom: 6 },
   formHint: { color: "#475569", lineHeight: 19, marginBottom: 16 },
   fieldBlock: { marginBottom: 12 },
@@ -907,12 +1025,6 @@ const styles = StyleSheet.create({
   toggleKnobActive: {
     alignSelf: "flex-end",
   },
-  definitionCard: {
-    backgroundColor: "#FFF",
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 10,
-  },
   selector: {
     borderWidth: 1,
     borderColor: "#D1D5DB",
@@ -931,15 +1043,31 @@ const styles = StyleSheet.create({
     color: "#0F172A",
     fontWeight: "700",
   },
+  selectorHelp: {
+    color: "#64748B",
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 6,
+  },
   switchRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     marginBottom: 10,
+    gap: 12,
+  },
+  switchCopy: {
+    flex: 1,
   },
   switchLabel: {
     color: "#111827",
     fontWeight: "700",
+  },
+  switchHelp: {
+    color: "#64748B",
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 3,
   },
   removeText: { color: "#B91C1C", fontWeight: "700" },
   saveButton: { marginTop: 10, backgroundColor: "#001F7C", borderRadius: 14, paddingVertical: 14 },

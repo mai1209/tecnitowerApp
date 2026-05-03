@@ -24,8 +24,12 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["admin", "technician", "viewer"],
-      default: "technician",
+      enum: ["admin", "user", "technician", "viewer"],
+      default: "user",
+    },
+    canWrite: {
+      type: Boolean,
+      default: true,
     },
     isActive: {
       type: Boolean,

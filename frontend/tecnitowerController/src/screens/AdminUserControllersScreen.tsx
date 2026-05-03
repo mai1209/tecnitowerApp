@@ -11,9 +11,9 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import { AlertTriangle, Settings2, UserRound } from "lucide-react-native";
+import { AlertTriangle, BellRing, Settings2, UserRound } from "lucide-react-native";
 import AppLayout from "../layouts/AppLayout";
-import { fetchAdminUsers, updateAdminUser } from "../services/api";
+import { fetchAdminUsers, sendAdminUserTestPush, updateAdminUser } from "../services/api";
 
 function controllerStatus(controller: any) {
   if (controller?.alertState?.active) {
@@ -56,12 +56,28 @@ function formatTelemetryPreview(controller: any) {
   return pieces.length > 0 ? pieces.join(" · ") : "Sin lectura reciente";
 }
 
+function getUserRoleLabel(role: "admin" | "user", canWrite: boolean) {
+  if (role === "admin") return "Administrador";
+  return canWrite ? "Usuario con edición" : "Usuario solo lectura";
+}
+
+function getUserRoleHelp(role: "admin" | "user", canWrite: boolean) {
+  if (role === "admin") {
+    return "Puede entrar al panel administrador y gestionar usuarios, controladores y modelos.";
+  }
+  return canWrite
+    ? "Puede entrar a la app y editar los parámetros y controladores que el admin haya habilitado."
+    : "Puede entrar a la app solo para consultar información; no puede editar ni dar de alta equipos.";
+}
+
 export default function AdminUserControllersScreen({ navigation, route, session, onLogout }: any) {
   const targetUserId = String(route?.params?.userId ?? "");
   const fallbackUser = route?.params?.user ?? null;
   const [user, setUser] = useState<any>(fallbackUser);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [testingPush, setTestingPush] = useState(false);
+  const activeAlerts = (user?.controllers ?? []).filter((controller: any) => controller?.alertState?.active);
 
   useFocusEffect(
     useCallback(() => {
@@ -101,7 +117,8 @@ export default function AdminUserControllersScreen({ navigation, route, session,
           <Text style={styles.eyebrow}>Panel de usuario</Text>
           <Text style={styles.title}>{user?.fullName || "Usuario"}</Text>
           <Text style={styles.subtitle}>
-            {user?.email || "Sin correo"} · Rol {user?.role || "-"} · {user?.controllersCount ?? 0} controladores
+            {user?.email || "Sin correo"} · Rol{" "}
+            {user?.role ? getUserRoleLabel(user.role, user?.canWrite !== false) : "-"} · {user?.controllersCount ?? 0} controladores
           </Text>
 
           <TouchableOpacity
@@ -113,7 +130,7 @@ export default function AdminUserControllersScreen({ navigation, route, session,
               })
             }
           >
-            <Text style={styles.addButtonText}>Agregar controlador a este usuario</Text>
+            <Text style={styles.addButtonText}>Cargar otro controlador para este usuario</Text>
           </TouchableOpacity>
         </View>
 
@@ -130,6 +147,57 @@ export default function AdminUserControllersScreen({ navigation, route, session,
               setUser(found ?? null);
             }}
           />
+        )}
+
+        {!loading && user && (
+          <View style={styles.summaryCard}>
+            <View style={styles.summaryHeader}>
+              <BellRing color="#0F172A" size={18} />
+              <Text style={styles.summaryTitle}>Alertas y notificaciones</Text>
+            </View>
+            <Text style={styles.summaryText}>
+              Alertas activas: {activeAlerts.length} · Dispositivos push registrados: {user?.pushDevicesEnabledCount ?? 0}
+            </Text>
+            <Text style={styles.summaryText}>
+              Las push de este usuario se envían solo a los tokens asociados a su cuenta.
+            </Text>
+            <TouchableOpacity
+              style={[styles.pushTestButton, testingPush && styles.pushTestButtonDisabled]}
+              disabled={testingPush}
+              onPress={async () => {
+                setTestingPush(true);
+                try {
+                  const response = await sendAdminUserTestPush(user._id, session.token);
+                  const result = response?.result ?? {};
+                  Alert.alert(
+                    "Push de prueba",
+                    response?.message ||
+                      `Enviadas: ${result.successCount ?? 0} · Fallidas: ${result.failureCount ?? 0}`
+                  );
+                } catch (err: any) {
+                  Alert.alert("Error", err?.message || "No se pudo enviar la notificación de prueba");
+                } finally {
+                  setTestingPush(false);
+                }
+              }}
+            >
+              <Text style={styles.pushTestButtonText}>
+                {testingPush ? "Enviando prueba..." : "Enviar notificación de prueba"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {!loading && activeAlerts.length > 0 && (
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryTitle}>Alertas activas de este usuario</Text>
+            {activeAlerts.map((controller: any) => (
+              <View key={controller._id} style={styles.activeAlertRow}>
+                <Text style={styles.activeAlertTitle}>{controller.name}</Text>
+                <Text style={styles.activeAlertText}>{controller?.alertState?.message || "Alerta activa"}</Text>
+              </View>
+            ))}
+          </View>
         )}
 
         {!loading && !error && (user?.controllers ?? []).length === 0 && (
@@ -209,14 +277,13 @@ function AdminUserEditor({
   onSaved: () => Promise<void>;
 }) {
   const [fullName, setFullName] = useState(user.fullName ?? "");
-  const [role, setRole] = useState(user.role ?? "technician");
+  const [role, setRole] = useState<"admin" | "user">(user.role === "admin" ? "admin" : "user");
+  const [canWrite, setCanWrite] = useState(user.role === "admin" ? true : user.canWrite !== false);
   const [isActive, setIsActive] = useState(user.isActive !== false);
   const [saving, setSaving] = useState(false);
 
   const cycleRole = () => {
-    setRole((current: "admin" | "technician" | "viewer") =>
-      current === "admin" ? "technician" : current === "technician" ? "viewer" : "admin"
-    );
+    setRole((current) => (current === "admin" ? "user" : "admin"));
   };
 
   const handleSave = async () => {
@@ -232,6 +299,7 @@ function AdminUserEditor({
         {
           fullName: fullName.trim(),
           role,
+          canWrite: role === "admin" ? true : canWrite,
           isActive,
         },
         token
@@ -248,6 +316,9 @@ function AdminUserEditor({
   return (
     <View style={styles.userEditor}>
       <Text style={styles.editorTitle}>Datos del usuario</Text>
+      <Text style={styles.editorHint}>
+        Desde acá editás los datos generales de este usuario. No modifica controladores ni registros.
+      </Text>
       <Text style={styles.editorLabel}>Nombre</Text>
       <TextInput
         style={styles.editorInput}
@@ -257,9 +328,23 @@ function AdminUserEditor({
       />
 
       <TouchableOpacity style={styles.editorSelect} onPress={cycleRole}>
-        <Text style={styles.editorSelectLabel}>Rol</Text>
-        <Text style={styles.editorSelectValue}>{role}</Text>
+        <Text style={styles.editorSelectLabel}>Tipo de cuenta</Text>
+        <Text style={styles.editorSelectValue}>
+          {getUserRoleLabel(role, role === "admin" ? true : canWrite)}
+        </Text>
+        <Text style={styles.editorSelectHelp}>
+          {getUserRoleHelp(role, role === "admin" ? true : canWrite)}
+        </Text>
       </TouchableOpacity>
+
+      {role !== "admin" && (
+        <View style={styles.switchRow}>
+          <Text style={styles.switchText}>
+            {canWrite ? "Usuario con lectura y escritura" : "Usuario solo lectura"}
+          </Text>
+          <Switch value={canWrite} onValueChange={setCanWrite} />
+        </View>
+      )}
 
       <View style={styles.switchRow}>
         <Text style={styles.switchText}>{isActive ? "Usuario activo" : "Usuario inactivo"}</Text>
@@ -271,7 +356,9 @@ function AdminUserEditor({
         disabled={saving}
         onPress={handleSave}
       >
-        <Text style={styles.saveUserButtonText}>{saving ? "Guardando..." : "Guardar usuario"}</Text>
+        <Text style={styles.saveUserButtonText}>
+          {saving ? "Guardando..." : "Guardar cambios del usuario"}
+        </Text>
       </TouchableOpacity>
     </View>
   );
@@ -353,6 +440,11 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     marginBottom: 10,
   },
+  editorHint: {
+    color: "#64748B",
+    lineHeight: 18,
+    marginBottom: 12,
+  },
   editorLabel: {
     color: "#475569",
     fontSize: 12,
@@ -386,6 +478,12 @@ const styles = StyleSheet.create({
   editorSelectValue: {
     color: "#0F172A",
     fontWeight: "700",
+  },
+  editorSelectHelp: {
+    color: "#64748B",
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 6,
   },
   switchRow: {
     flexDirection: "row",
@@ -422,6 +520,61 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: "#64748B",
+  },
+  summaryCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  summaryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  summaryTitle: {
+    color: "#111827",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  summaryText: {
+    color: "#64748B",
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  pushTestButton: {
+    backgroundColor: "#0F172A",
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 14,
+  },
+  pushTestButtonDisabled: {
+    opacity: 0.6,
+  },
+  pushTestButtonText: {
+    color: "#FFFFFF",
+    textAlign: "center",
+    fontWeight: "800",
+  },
+  activeAlertRow: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    backgroundColor: "#FFFBEB",
+    padding: 12,
+  },
+  activeAlertTitle: {
+    color: "#111827",
+    fontWeight: "900",
+  },
+  activeAlertText: {
+    color: "#78350F",
+    lineHeight: 18,
+    marginTop: 4,
   },
   controllerCard: {
     backgroundColor: "#FFFFFF",

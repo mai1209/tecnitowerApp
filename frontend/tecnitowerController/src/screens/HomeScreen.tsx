@@ -68,6 +68,7 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const canWrite = session?.user?.role === 'admin' || session?.user?.canWrite === true;
 
   useFocusEffect(
     useCallback(() => {
@@ -153,7 +154,7 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
             </View>
 
             <View style={styles.headerActions}>
-              {session?.user?.role !== 'admin' && (
+              {session?.user?.role !== 'admin' && canWrite && (
                 <TouchableOpacity
                   style={styles.primaryCta}
                   onPress={() => navigation.navigate('ControllerForm')}
@@ -243,17 +244,19 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.deleteBadge, deletingId === ctrl._id && styles.deleteBadgeDisabled]}
-              onPress={() => handleDeleteController(ctrl)}
-              disabled={deletingId === ctrl._id}
-            >
-              {deletingId === ctrl._id ? (
-                <ActivityIndicator size="small" color="#991B1B" />
-              ) : (
-                <Trash2 color="#991B1B" strokeWidth={2} size={18} />
-              )}
-            </TouchableOpacity>
+            {canWrite && (
+              <TouchableOpacity
+                style={[styles.deleteBadge, deletingId === ctrl._id && styles.deleteBadgeDisabled]}
+                onPress={() => handleDeleteController(ctrl)}
+                disabled={deletingId === ctrl._id}
+              >
+                {deletingId === ctrl._id ? (
+                  <ActivityIndicator size="small" color="#991B1B" />
+                ) : (
+                  <Trash2 color="#991B1B" strokeWidth={2} size={18} />
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         ))}
       </ScrollView>

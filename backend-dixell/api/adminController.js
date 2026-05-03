@@ -1,7 +1,11 @@
 import { ControllerModel } from "../models/Controller.js";
+import { PasswordRecoveryRequestModel } from "../models/PasswordRecoveryRequest.js";
+import { PushDeviceModel } from "../models/PushDevice.js";
 import { UserModel } from "../models/User.js";
 import { invalidateDiagnosticCache } from "../services/diagnosticCacheService.js";
 import { publishControllerRealtime } from "../services/controllerRealtimeService.js";
+import { sendPushToUser } from "../services/pushNotificationService.js";
+import { buildPublicUser, normalizeUserRole } from "../utils/userAccess.js";
 import { buildControllerPayloadForOwner } from "./controllerController.js";
 
 function requireAdmin(req, res) {
@@ -46,7 +50,7 @@ function sanitizeRegisterDefinitions(rawDefinitions = []) {
         dataType: ["number", "integer", "boolean"].includes(dataType) ? dataType : "number",
         writable: definition?.writable !== false,
         visible: definition?.visible !== false,
-        accessLevel: definition?.accessLevel === "technician" ? "technician" : "user",
+        accessLevel: "user",
         functionCode: ["0x06", "0x10"].includes(definition?.functionCode) ? definition.functionCode : "auto",
         description: definition?.description ? String(definition.description).trim() : undefined,
         sortOrder: Number.isFinite(Number(definition?.sortOrder)) ? Number(definition.sortOrder) : index,
@@ -69,16 +73,41 @@ function requiresLocalIp(gatewayMode) {
   return transport !== "elfin-mqtt" && transport !== "tcp-client";
 }
 
+async function deleteUserResources(userId) {
+  const controllers = await ControllerModel.find({ owner: userId }).select({ _id: 1 });
+  for (const controller of controllers) {
+    invalidateDiagnosticCache(controller._id);
+  }
+
+  await ControllerModel.deleteMany({ owner: userId });
+  await PushDeviceModel.deleteMany({ user: userId });
+  await PasswordRecoveryRequestModel.deleteMany({ userId });
+}
+
 export async function listUsersWithControllers(req, res, next) {
   try {
     if (!requireAdmin(req, res)) return;
 
     const users = await UserModel.find({})
-      .select({ fullName: 1, email: 1, role: 1, isActive: 1, createdAt: 1 })
+      .select({ fullName: 1, email: 1, role: 1, canWrite: 1, isActive: 1, createdAt: 1 })
       .sort({ createdAt: -1 })
       .lean();
 
     const userIds = users.map((user) => user._id);
+    const pushDevices = await PushDeviceModel.aggregate([
+      {
+        $match: {
+          user: { $in: userIds },
+          enabled: true,
+        },
+      },
+      {
+        $group: {
+          _id: "$user",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
     const controllers = await ControllerModel.find({ owner: { $in: userIds } })
       .select({
         owner: 1,
@@ -105,6 +134,9 @@ export async function listUsersWithControllers(req, res, next) {
       })
       .sort({ createdAt: -1 })
       .lean();
+    const pushDevicesByUser = new Map(
+      pushDevices.map((item) => [String(item._id), Number(item.count ?? 0)])
+    );
 
     const controllersByOwner = new Map();
     for (const controller of controllers) {
@@ -123,12 +155,8 @@ export async function listUsersWithControllers(req, res, next) {
       users: users.map((user) => {
         const ownedControllers = controllersByOwner.get(String(user._id)) ?? [];
         return {
-          _id: user._id?.toString(),
-          fullName: user.fullName,
-          email: user.email,
-          role: user.role,
-          isActive: user.isActive,
-          createdAt: user.createdAt,
+          ...buildPublicUser(user),
+          pushDevicesEnabledCount: pushDevicesByUser.get(String(user._id)) ?? 0,
           controllersCount: ownedControllers.length,
           controllers: ownedControllers,
         };
@@ -158,10 +186,18 @@ export async function updateAdminUser(req, res, next) {
 
     if (req.body?.role != null) {
       const role = String(req.body.role).trim().toLowerCase();
-      if (!["admin", "technician", "viewer"].includes(role)) {
+      if (!["admin", "user"].includes(role)) {
         return res.status(400).json({ error: "Rol inválido" });
       }
       user.role = role;
+    }
+
+    if (req.body?.canWrite != null) {
+      user.canWrite = Boolean(req.body.canWrite);
+    }
+
+    if (normalizeUserRole(user.role) === "admin") {
+      user.canWrite = true;
     }
 
     if (req.body?.isActive != null) {
@@ -171,14 +207,75 @@ export async function updateAdminUser(req, res, next) {
     await user.save();
 
     return res.json({
-      user: {
-        _id: user._id.toString(),
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-        isActive: user.isActive,
-        createdAt: user.createdAt,
+      user: buildPublicUser(user),
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function deleteAdminUser(req, res, next) {
+  try {
+    if (!requireAdmin(req, res)) return;
+
+    const user = await UserModel.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    if (String(user._id) === String(req.user?.id ?? "")) {
+      return res.status(400).json({ error: "No podés eliminar tu propio usuario desde este panel" });
+    }
+
+    const deletedUser = {
+      _id: user._id.toString(),
+      fullName: user.fullName,
+      email: user.email,
+      role: normalizeUserRole(user.role),
+    };
+
+    await deleteUserResources(user._id);
+    await user.deleteOne();
+
+    return res.json({
+      message: "Usuario eliminado correctamente",
+      user: deletedUser,
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function sendAdminUserTestPush(req, res, next) {
+  try {
+    if (!requireAdmin(req, res)) return;
+
+    const user = await UserModel.findById(req.params.id)
+      .select({ _id: 1, fullName: 1, email: 1, role: 1, canWrite: 1, isActive: 1, createdAt: 1 })
+      .lean();
+    if (!user) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    const result = await sendPushToUser({
+      userId: user._id,
+      title: "Prueba de notificación",
+      body: "Esta es una prueba de Tecnitower para validar push en este usuario.",
+      data: {
+        kind: "admin-test-push",
+        userId: user._id,
+        userEmail: user.email,
+        screen: "Home",
       },
+    });
+
+    return res.json({
+      message:
+        result.sent === true
+          ? "Notificación de prueba enviada"
+          : "No se pudo entregar la notificación de prueba",
+      result,
+      user: buildPublicUser(user),
     });
   } catch (err) {
     return next(err);
@@ -209,6 +306,34 @@ export async function createAdminController(req, res, next) {
     if (err?.code === 11000 && err?.keyPattern?.elfinId) {
       return res.status(409).json({ error: "Ese Elfin ID ya está registrado en otro controlador." });
     }
+    return next(err);
+  }
+}
+
+export async function deleteAdminController(req, res, next) {
+  try {
+    if (!requireAdmin(req, res)) return;
+
+    const controller = await ControllerModel.findById(req.params.id);
+    if (!controller) {
+      return res.status(404).json({ error: "Controlador no encontrado" });
+    }
+
+    const deleted = {
+      _id: controller._id.toString(),
+      name: controller.name,
+      elfinId: controller.elfinId,
+      owner: controller.owner?.toString?.() ?? String(controller.owner ?? ""),
+    };
+
+    await controller.deleteOne();
+    invalidateDiagnosticCache(controller._id);
+
+    return res.json({
+      message: "Controlador eliminado correctamente",
+      controller: deleted,
+    });
+  } catch (err) {
     return next(err);
   }
 }

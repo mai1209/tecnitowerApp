@@ -60,12 +60,15 @@ function LoginScreen({ onLogin, navigation }: Props) {
         _id: String(rawUser._id ?? rawUser.id ?? ''),
         fullName: String(rawUser.fullName ?? ''),
         email: String(rawUser.email ?? ''),
-        role:
-          rawUser.role === 'admin' ||
-          rawUser.role === 'technician' ||
-          rawUser.role === 'viewer'
-            ? rawUser.role
-            : 'technician',
+        role: rawUser.role === 'admin' ? 'admin' : 'user',
+        canWrite:
+          rawUser.role === 'admin'
+            ? true
+            : typeof rawUser.canWrite === 'boolean'
+              ? rawUser.canWrite
+              : rawUser.role === 'viewer'
+                ? false
+                : true,
       };
 
       onLogin?.({ token, user });

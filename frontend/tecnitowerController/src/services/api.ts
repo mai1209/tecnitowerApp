@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { NativeModules } from "react-native";
 import { STORAGE_KEYS } from "../constants/storageKeys";
 
 type RequestOptions = {
@@ -24,6 +23,18 @@ export type LoginPayload = {
 
 export type PasswordRecoveryPayload = {
   email: string;
+};
+
+export type ChangePasswordPayload = {
+  currentPassword: string;
+  newPassword: string;
+};
+
+export type PushTokenPayload = {
+  token: string;
+  platform: "ios" | "android";
+  deviceId?: string;
+  appVersion?: string;
 };
 
 export type ControllerPayload = {
@@ -67,7 +78,6 @@ export type RegisterDefinitionPayload = {
   dataType?: "number" | "integer" | "boolean";
   writable?: boolean;
   visible?: boolean;
-  accessLevel?: "user" | "technician";
   functionCode?: "auto" | "0x06" | "0x10";
   description?: string;
   sortOrder?: number;
@@ -92,19 +102,19 @@ export type SetpointScanResponse = {
   results: SetpointScanResult[];
 };
 
-function resolveDevApiUrl() {
-  // IP por defecto del backend en la red local (Mac actual)
-  const LAN_IP = "http://137.131.194.247:3001"; 
 
-  const scriptURL: string | undefined = NativeModules?.SourceCode?.scriptURL;
-  if (!scriptURL) return LAN_IP;
 
-  const match = scriptURL.match(/https?:\/\/([^:]+):/);
-  const host = match?.[1];
+const LOCAL_API_URL = "http://192.168.100.56:3001";
+const CLOUD_API_URL = "http://137.131.194.247:3001";
 
-  if (!host || host === "localhost" || host === "127.0.0.1") return LAN_IP;
-  return `http://${host}:3001`;
+export const DEFAULT_API_BASE_URL = __DEV__
+  ? LOCAL_API_URL
+  : CLOUD_API_URL;
+
+export async function getApiBaseUrl() {
+  return DEFAULT_API_BASE_URL;
 }
+
 
 function normalizeApiBaseUrl(rawUrl?: string | null) {
   const trimmed = String(rawUrl ?? "").trim();
@@ -113,17 +123,10 @@ function normalizeApiBaseUrl(rawUrl?: string | null) {
   return withProtocol.replace(/\/+$/, "");
 }
 
-const DEV_API_URL = resolveDevApiUrl();
-const CLOUD_API_URL = "http://137.131.194.247:3001";
-const PROD_API_URL = normalizeApiBaseUrl(CLOUD_API_URL) || DEV_API_URL;
 
-export const DEFAULT_API_BASE_URL = __DEV__ ? DEV_API_URL : PROD_API_URL;
-export const API_BASE_URL = DEFAULT_API_BASE_URL;
 
-export async function getApiBaseUrl() {
-  const customBaseUrl = await AsyncStorage.getItem(STORAGE_KEYS.apiBaseUrl);
-  return normalizeApiBaseUrl(customBaseUrl) || DEFAULT_API_BASE_URL;
-}
+
+
 
 export async function setApiBaseUrl(value?: string | null) {
   const normalized = normalizeApiBaseUrl(value);
@@ -155,6 +158,7 @@ export async function getControllerWebSocketUrl(controllerId: string, authToken:
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const baseUrl = await getApiBaseUrl();
   const url = `${baseUrl}${path}`;
+  console.log("[API REQUEST]", options.method ?? "GET", url);
   const headers: Record<string, string> = {
     Accept: "application/json",
     "Content-Type": "application/json",
@@ -224,6 +228,38 @@ export function requestPasswordRecovery(payload: PasswordRecoveryPayload) {
   });
 }
 
+export function changeCurrentUserPassword(payload: ChangePasswordPayload, authToken: string) {
+  return request<{ message: string }>("/api/auth/change-password", {
+    method: "POST",
+    body: payload,
+    authToken,
+  });
+}
+
+export function deleteCurrentUserAccount(password: string, authToken: string) {
+  return request<{ message: string }>("/api/auth/me", {
+    method: "DELETE",
+    body: { password },
+    authToken,
+  });
+}
+
+export function registerPushToken(payload: PushTokenPayload, authToken: string) {
+  return request<{ message: string; device: any }>("/api/auth/push/register", {
+    method: "POST",
+    body: payload,
+    authToken,
+  });
+}
+
+export function unregisterPushToken(token: string, authToken: string) {
+  return request<{ message: string }>("/api/auth/push/unregister", {
+    method: "POST",
+    body: { token },
+    authToken,
+  });
+}
+
 export function createController(payload: ControllerPayload, authToken: string) {
   return request<{ controller: any }>("/api/controllers", { method: "POST", body: payload, authToken });
 }
@@ -268,13 +304,29 @@ export function fetchAdminUsers(authToken: string) {
 
 export function updateAdminUser(
   userId: string,
-  payload: { fullName: string; role: "admin" | "technician" | "viewer"; isActive: boolean },
+  payload: { fullName: string; role: "admin" | "user"; canWrite: boolean; isActive: boolean },
   authToken: string
 ) {
   return request<{ user: any }>(`/api/admin/users/${userId}`, {
     method: "PUT",
     body: payload,
     authToken,
+  });
+}
+
+export function deleteAdminUser(userId: string, authToken: string) {
+  return request<{ message: string; user: any }>(`/api/admin/users/${userId}`, {
+    method: "DELETE",
+    authToken,
+    timeoutMs: 15000,
+  });
+}
+
+export function sendAdminUserTestPush(userId: string, authToken: string) {
+  return request<{ message: string; result: any; user: any }>(`/api/admin/users/${userId}/push-test`, {
+    method: "POST",
+    authToken,
+    timeoutMs: 15000,
   });
 }
 

@@ -1,7 +1,10 @@
 import { UserModel } from "../models/User.js";
+import { PushDeviceModel } from "../models/PushDevice.js";
+import { ControllerModel } from "../models/Controller.js";
 import { PasswordRecoveryRequestModel } from "../models/PasswordRecoveryRequest.js";
 import { hashPassword, verifyPassword } from "../token/passwordManager.js";
 import { signAccessToken } from "../token/jwtManager.js";
+import { buildPublicUser, normalizeUserRole } from "../utils/userAccess.js";
 
 function sanitizeEmail(email) {
   return String(email ?? "").trim().toLowerCase();
@@ -12,7 +15,23 @@ function isValidEmail(email) {
 }
 
 function canManageRecovery(role) {
-  return role === "admin" || role === "technician";
+  return normalizeUserRole(role) === "admin";
+}
+
+function sanitizePushToken(token) {
+  return String(token ?? "").trim();
+}
+
+function sanitizePlatform(platform) {
+  const normalized = String(platform ?? "").trim().toLowerCase();
+  if (normalized === "ios" || normalized === "android") return normalized;
+  return null;
+}
+
+async function deleteOwnUserResources(userId) {
+  await ControllerModel.deleteMany({ owner: userId });
+  await PushDeviceModel.deleteMany({ user: userId });
+  await PasswordRecoveryRequestModel.deleteMany({ userId });
 }
 
 export async function registerUser(req, res, next) {
@@ -42,7 +61,8 @@ export async function registerUser(req, res, next) {
       fullName,
       email,
       passwordHash,
-      role: "technician",
+      role: "user",
+      canWrite: true,
     });
 
     return res.status(201).json({
@@ -78,20 +98,13 @@ export async function loginUser(req, res, next) {
     const token = signAccessToken({
       sub: userDoc._id.toString(),
       email: userDoc.email,
-      role: userDoc.role,
+      role: normalizeUserRole(userDoc.role),
     });
-
-    const user = {
-      _id: userDoc._id.toString(),
-      fullName: userDoc.fullName,
-      email: userDoc.email,
-      role: userDoc.role,
-    };
 
     return res.json({
       message: "Login exitoso",
       token,
-      user,
+      user: buildPublicUser(userDoc),
     });
   } catch (err) {
     return next(err);
@@ -200,11 +213,146 @@ export async function resetUserPassword(req, res, next) {
 
     return res.json({
       message: "Contraseña restablecida correctamente",
-      user: {
-        _id: userDoc._id.toString(),
-        email: userDoc.email,
-        fullName: userDoc.fullName,
+      user: buildPublicUser(userDoc),
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function changeCurrentUserPassword(req, res, next) {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: "Usuario no autenticado" });
+    }
+
+    const currentPassword = String(req.body?.currentPassword ?? "");
+    const newPassword = String(req.body?.newPassword ?? "");
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: "currentPassword y newPassword son obligatorios" });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: "La nueva contraseña debe tener al menos 8 caracteres" });
+    }
+
+    const userDoc = await UserModel.findById(req.user.id).select("+passwordHash");
+    if (!userDoc || userDoc.isActive === false) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    const validPassword = await verifyPassword(currentPassword, userDoc.passwordHash);
+    if (!validPassword) {
+      return res.status(401).json({ error: "La contraseña actual es incorrecta" });
+    }
+
+    userDoc.passwordHash = await hashPassword(newPassword);
+    await userDoc.save();
+
+    return res.json({ message: "Contraseña actualizada correctamente" });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function deleteCurrentUserAccount(req, res, next) {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: "Usuario no autenticado" });
+    }
+
+    const password = String(req.body?.password ?? "");
+    if (!password) {
+      return res.status(400).json({ error: "password es obligatorio" });
+    }
+
+    const userDoc = await UserModel.findById(req.user.id).select("+passwordHash");
+    if (!userDoc || userDoc.isActive === false) {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+
+    const validPassword = await verifyPassword(password, userDoc.passwordHash);
+    if (!validPassword) {
+      return res.status(401).json({ error: "La contraseña es incorrecta" });
+    }
+
+    await deleteOwnUserResources(userDoc._id);
+    await userDoc.deleteOne();
+
+    return res.json({ message: "Cuenta eliminada correctamente" });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function registerPushDevice(req, res, next) {
+  try {
+    const token = sanitizePushToken(req.body?.token);
+    const platform = sanitizePlatform(req.body?.platform);
+    const deviceId = String(req.body?.deviceId ?? "").trim() || undefined;
+    const appVersion = String(req.body?.appVersion ?? "").trim() || undefined;
+
+    if (!req.user?.id) {
+      return res.status(401).json({ error: "Usuario no autenticado" });
+    }
+
+    if (!token || !platform) {
+      return res.status(400).json({ error: "token y platform son obligatorios" });
+    }
+
+    const device = await PushDeviceModel.findOneAndUpdate(
+      { token },
+      {
+        $set: {
+          user: req.user.id,
+          token,
+          platform,
+          deviceId,
+          appVersion,
+          enabled: true,
+          lastSeenAt: new Date(),
+        },
       },
+      {
+        new: true,
+        upsert: true,
+        setDefaultsOnInsert: true,
+      }
+    ).lean();
+
+    return res.json({
+      message: "Push token registrado",
+      device: {
+        _id: device?._id?.toString?.() ?? null,
+        platform: device?.platform ?? platform,
+        token,
+      },
+    });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function unregisterPushDevice(req, res, next) {
+  try {
+    const token = sanitizePushToken(req.body?.token);
+
+    if (!req.user?.id) {
+      return res.status(401).json({ error: "Usuario no autenticado" });
+    }
+
+    if (!token) {
+      return res.status(400).json({ error: "token es obligatorio" });
+    }
+
+    await PushDeviceModel.deleteOne({
+      token,
+      user: req.user.id,
+    });
+
+    return res.json({
+      message: "Push token eliminado",
     });
   } catch (err) {
     return next(err);

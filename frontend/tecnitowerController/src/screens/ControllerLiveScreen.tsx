@@ -15,7 +15,7 @@ import AppLayout from '../layouts/AppLayout';
 import { fetchDiagnostic, getControllerWebSocketUrl } from '../services/api';
 import RemoteControlScreen from './RemoteControlScreen';
 import { STORAGE_KEYS } from '../constants/storageKeys';
-import { Activity, Cpu, Settings2, Thermometer } from 'lucide-react-native';
+import { Activity, BellRing, Cpu, Settings2, Thermometer } from 'lucide-react-native';
 
 const PRESENTATION_READINGS = [
   { key: 'SET', label: 'Setpoint normal' },
@@ -23,6 +23,13 @@ const PRESENTATION_READINGS = [
   { key: 'US', label: 'Setpoint máximo' },
   { key: 'TMP1', label: 'Temperatura S1' },
 ];
+
+function filterDefinitionsForRole(definitions: any[]) {
+  return (definitions ?? []).filter((definition: any) => {
+    if (definition?.visible === false) return false;
+    return true;
+  });
+}
 
 function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
   const { controller } = route.params;
@@ -35,6 +42,7 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
     userParams768: null as any,
     status1280: null as any,
     online: false,
+    userCanWrite: session?.user?.role === 'admin' || session?.user?.canWrite === true,
     connectionState: controller?.connectionState ?? null,
     alertState: controller?.alertState ?? null,
     paramSetpoint: null,
@@ -88,7 +96,7 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
       STORAGE_KEYS.lastController,
       JSON.stringify({ id: controller._id, name: controller?.name }),
     ).catch(() => {});
-  }, [controller?._id]);
+  }, [controller?._id, controller?.name]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -97,7 +105,7 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
 
       // Si no vienen valores dinámicos desde el diagnóstico, usamos las definiciones locales del controlador
       const baseDefinitions = Array.isArray(controller?.registerDefinitions)
-        ? controller.registerDefinitions
+        ? filterDefinitionsForRole(controller.registerDefinitions)
         : [];
       const configuredRegisters =
         Array.isArray(json?.configuredRegisters) && json.configuredRegisters.length > 0
@@ -111,6 +119,10 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
         userParams768: json?.userParams768 ?? null,
         status1280: json?.status1280 ?? null,
         online: Boolean(json?.online),
+        userCanWrite:
+          typeof json?.userCanWrite === 'boolean'
+            ? json.userCanWrite
+            : session?.user?.role === 'admin' || session?.user?.canWrite === true,
         connectionState: json?.connectionState ?? null,
         alertState: json?.alertState ?? null,
         paramSetpoint: json?.setpointParamValue ?? null,
@@ -123,18 +135,20 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
         setData(prev => ({
           ...prev,
           online: true,
+          userCanWrite:
+            session?.user?.role === 'admin' || session?.user?.canWrite === true,
           configuredRegisters:
             Array.isArray(prev.configuredRegisters) && prev.configuredRegisters.length > 0
               ? prev.configuredRegisters
               : Array.isArray(controller?.registerDefinitions)
-                ? controller.registerDefinitions
+                ? filterDefinitionsForRole(controller.registerDefinitions)
                 : [],
         }));
       }
     } finally {
       setRefreshing(false);
     }
-  }, [controller._id, session.token]);
+  }, [controller._id, controller?.registerDefinitions, session.token, session?.user?.canWrite, session?.user?.role]);
 
   const scheduleRealtimeRefresh = useCallback((delayMs = 150) => {
     if (realtimeRefreshTimerRef.current) {
@@ -369,6 +383,21 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
           </View>
 
           <View style={styles.section}>
+            {data.userCanWrite && (
+              <TouchableOpacity
+                style={styles.configButton}
+                onPress={() =>
+                  navigation.navigate('ControllerRegisterConfig', {
+                    controller,
+                    adminMode: session?.user?.role === 'admin',
+                    section: 'alerts',
+                  })
+                }
+              >
+                <BellRing color="#0F172A" size={18} strokeWidth={2.2} />
+                <Text style={styles.configButtonText}>Configurar alertas</Text>
+              </TouchableOpacity>
+            )}
             {session?.user?.role === 'admin' && (
               <TouchableOpacity
                 style={styles.configButton}
@@ -388,6 +417,7 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
               token={session?.token}
               configuredRegisters={data.configuredRegisters}
               online={data.online}
+              profileCanWrite={data.userCanWrite}
             />
           </View>
         </ScrollView>

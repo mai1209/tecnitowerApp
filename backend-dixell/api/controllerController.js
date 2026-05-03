@@ -86,7 +86,7 @@ function sanitizeRegisterDefinitions(rawDefinitions = []) {
         dataType: ["number", "integer", "boolean"].includes(dataType) ? dataType : "number",
         writable: definition?.writable !== false,
         visible: definition?.visible !== false,
-        accessLevel: definition?.accessLevel === "technician" ? "technician" : "user",
+        accessLevel: "user",
         functionCode: ["0x06", "0x10"].includes(definition?.functionCode) ? definition.functionCode : "auto",
         description: definition?.description ? String(definition.description).trim() : undefined,
         sortOrder: Number.isFinite(Number(definition?.sortOrder)) ? Number(definition.sortOrder) : index,
@@ -212,8 +212,25 @@ function buildRegisterDefinitionFromControllerRegister(controller, overrides = {
   ])[0];
 }
 
+function canMutateOwnedController(role, canWrite) {
+  return role === "admin" || canWrite === true;
+}
+
+function canAccessDefinition(definition) {
+  if (definition?.visible === false) return false;
+  return true;
+}
+
+function ensureControllerMutationRole(req, res) {
+  if (canMutateOwnedController(req.user?.role, req.user?.canWrite)) return true;
+  res.status(403).json({ error: "Tu perfil es solo lectura" });
+  return false;
+}
+
 function getControllerVisibleDefinitions(controller) {
-  return (controller?.registerDefinitions ?? []).filter((definition) => definition?.visible !== false);
+  return (controller?.registerDefinitions ?? []).filter((definition) =>
+    canAccessDefinition(definition)
+  );
 }
 
 function getSetpointDefinition(controller) {
@@ -485,6 +502,8 @@ export const getSetpoint = async (req, res) => {
 
 export const createController = async (req, res, next) => {
   try {
+    if (!ensureControllerMutationRole(req, res)) return;
+
     const owner = req.user?.id;
     if (!owner) {
       return res.status(401).json({ error: "No autenticado" });
@@ -523,6 +542,8 @@ export const listControllers = async (req, res) => {
 
 export const deleteController = async (req, res) => {
   try {
+    if (!ensureControllerMutationRole(req, res)) return;
+
     const controller = await findOwnedController(req.params.id, req.user?.id);
     if (!controller) {
       return res.status(404).json({ error: "Controlador no encontrado" });
@@ -563,6 +584,8 @@ export const getController = async (req, res) => {
 
 export const updateControllerRegisterDefinitions = async (req, res) => {
   try {
+    if (!ensureControllerMutationRole(req, res)) return;
+
     const controller = await findOwnedController(req.params.id, req.user?.id);
     if (!controller) {
       return res.status(404).json({ error: "Controlador no encontrado" });
@@ -583,6 +606,8 @@ export const updateControllerRegisterDefinitions = async (req, res) => {
 
 export const setControllerSetpoint = async (req, res) => {
   try {
+    if (!ensureControllerMutationRole(req, res)) return;
+
     const controller = await findOwnedController(req.params.id, req.user?.id);
     if (!controller) return res.status(404).json({ error: "Controlador no encontrado" });
     touchControllerPolling(controller._id);
@@ -631,6 +656,8 @@ export const setControllerSetpoint = async (req, res) => {
 
 export const writeControllerRegister = async (req, res) => {
   try {
+    if (!ensureControllerMutationRole(req, res)) return;
+
     const controller = await findOwnedController(req.params.id, req.user?.id);
     if (!controller) {
       return res.status(404).json({ error: "Controlador no encontrado" });
@@ -647,6 +674,10 @@ export const writeControllerRegister = async (req, res) => {
 
     if (!definition) {
       return res.status(404).json({ error: "Parámetro no configurado en este controlador" });
+    }
+
+    if (definition?.writable === false) {
+      return res.status(403).json({ error: "Este parámetro es solo lectura" });
     }
 
     setWritingStatus(true);
@@ -911,6 +942,7 @@ export const diagnosticController = async (req, res) => {
 
         return {
           online,
+          userCanWrite: canMutateOwnedController(req.user?.role, req.user?.canWrite),
           probe1Value,
           setpointValue: Number.isFinite(rawDisplay) ? rawDisplay / scale : null,
           setpointRegister: displayRegister,
@@ -934,16 +966,19 @@ export const diagnosticController = async (req, res) => {
     return res.json(response);
   } catch (err) {
     console.error("❌ [DIAGNOSTIC ERROR]:", err?.message || err);
-    return res.json({ online: false, probe1Value: null, setpointValue: null, configuredRegisters: [] });
+    return res.json({
+      online: false,
+      userCanWrite: canMutateOwnedController(req.user?.role, req.user?.canWrite),
+      probe1Value: null,
+      setpointValue: null,
+      configuredRegisters: [],
+    });
   }
 };
 
 export const scanControllerSetpoint = async (req, res) => {
   try {
-    const role = req.user?.role;
-    if (role !== "admin" && role !== "technician") {
-      return res.status(403).json({ error: "No autorizado" });
-    }
+    if (!ensureControllerMutationRole(req, res)) return;
 
     const controller = await findOwnedController(req.params.id, req.user?.id);
     if (!controller) return res.status(404).json({ error: "Controlador no encontrado" });
@@ -998,6 +1033,8 @@ export const setControllerLs = async (req, res) => {
 
 export const setControllerSetpoint768 = async (req, res) => {
   try {
+    if (!ensureControllerMutationRole(req, res)) return;
+
     const controller = await findOwnedController(req.params.id, req.user?.id);
     if (!controller) return res.status(404).json({ error: "Controlador no encontrado" });
     touchControllerPolling(controller._id);
@@ -1053,6 +1090,8 @@ export const setControllerSetpoint768 = async (req, res) => {
 
 export const updateControllerSetpointConfig = async (req, res) => {
   try {
+    if (!ensureControllerMutationRole(req, res)) return;
+
     const controller = await findOwnedController(req.params.id, req.user?.id);
     if (!controller) {
       return res.status(404).json({ error: "Controlador no encontrado" });
@@ -1090,6 +1129,8 @@ export const updateControllerSetpointConfig = async (req, res) => {
 
 export const updateControllerConnectionConfig = async (req, res) => {
   try {
+    if (!ensureControllerMutationRole(req, res)) return;
+
     const controller = await findOwnedController(req.params.id, req.user?.id);
     if (!controller) {
       return res.status(404).json({ error: "Controlador no encontrado" });
@@ -1169,6 +1210,8 @@ export const updateControllerConnectionConfig = async (req, res) => {
 
 export const updateControllerAlertConfig = async (req, res) => {
   try {
+    if (!ensureControllerMutationRole(req, res)) return;
+
     const controller = await findOwnedController(req.params.id, req.user?.id);
     if (!controller) {
       return res.status(404).json({ error: "Controlador no encontrado" });

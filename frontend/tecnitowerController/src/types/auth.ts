@@ -2,7 +2,8 @@ export type AuthSessionUser = {
   _id: string;
   fullName: string;
   email: string;
-  role: "admin" | "technician" | "viewer";
+  role: "admin" | "user";
+  canWrite: boolean;
 };
 
 export type AuthSession = {

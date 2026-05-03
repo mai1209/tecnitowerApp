@@ -24,7 +24,6 @@ function blankRegisterDefinition() {
     max: "",
     writable: true,
     visible: true,
-    accessLevel: "user" as "user" | "technician",
     functionCode: "auto" as "auto" | "0x06" | "0x10",
     description: "",
   };
@@ -123,7 +122,6 @@ export default function DeviceModelFormScreen({ navigation, route, session, onLo
               max: definition.max == null ? "" : String(definition.max),
               writable: definition.writable !== false,
               visible: definition.visible !== false,
-              accessLevel: definition.accessLevel === "technician" ? "technician" : "user",
               functionCode:
                 definition.functionCode === "0x06" || definition.functionCode === "0x10"
                   ? definition.functionCode
@@ -173,7 +171,6 @@ export default function DeviceModelFormScreen({ navigation, route, session, onLo
           step: (parseOptionalNumber(definition.scale) ?? 10) === 10 ? 0.1 : 1,
           writable: definition.writable,
           visible: definition.visible,
-          accessLevel: definition.accessLevel,
           functionCode: definition.functionCode,
           description: definition.description.trim() || undefined,
           sortOrder: index,
@@ -286,18 +283,6 @@ export default function DeviceModelFormScreen({ navigation, route, session, onLo
                 <LabeledInput label="Min" value={definition.min} keyboardType="numbers-and-punctuation" onChangeText={(value) => updateRegisterDefinition(index, { min: value })} />
                 <LabeledInput label="Max" value={definition.max} keyboardType="numbers-and-punctuation" onChangeText={(value) => updateRegisterDefinition(index, { max: value })} />
                 <LabeledInput label="Descripción" value={definition.description} onChangeText={(value) => updateRegisterDefinition(index, { description: value })} />
-
-                <TouchableOpacity
-                  style={styles.selector}
-                  onPress={() =>
-                    updateRegisterDefinition(index, {
-                      accessLevel: definition.accessLevel === "user" ? "technician" : "user",
-                    })
-                  }
-                >
-                  <Text style={styles.selectorLabel}>Access level</Text>
-                  <Text style={styles.selectorValue}>{definition.accessLevel}</Text>
-                </TouchableOpacity>
 
                 <TouchableOpacity
                   style={styles.selector}

@@ -6,26 +6,26 @@ import AppLayout from "../layouts/AppLayout";
 const sections = [
   {
     key: "base",
-    title: "Configuración base",
-    description: "Nombre, Elfin ID, transporte, IP, Unit ID, baudrate, probes y ubicación.",
+    title: "Configuración base del controlador",
+    description: "Datos propios de este controlador del usuario: nombre, Elfin ID, transporte, IP, Unit ID, baudrate, probes y ubicación.",
     icon: Cpu,
   },
   {
     key: "alerts",
     title: "Alertas",
-    description: "Rangos de temperatura y tiempo máximo sin comunicación.",
+    description: "Rangos de temperatura y tiempo máximo sin comunicación para este controlador.",
     icon: BellRing,
   },
   {
     key: "parameter-new",
     title: "Alta de parámetro",
-    description: "Crear un nuevo parámetro visible/editable para este controlador.",
+    description: "Crear un nuevo parámetro para este controlador y decidir si el cliente lo verá o podrá editarlo.",
     icon: SlidersHorizontal,
   },
   {
     key: "definitions",
-    title: "Registros visibles/editables",
-    description: "Editar permisos, visibilidad y detalle de los registros ya cargados.",
+    title: "Registros cargados",
+    description: "Revisar qué registros ve el cliente y cuáles puede editar desde su app.",
     icon: Eye,
   },
 ];
@@ -38,11 +38,14 @@ export default function AdminControllerConfigHubScreen({ navigation, route, sess
     <AppLayout navigation={navigation} onLogout={onLogout} session={session}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.hero}>
-          <Text style={styles.eyebrow}>Panel técnico del controlador</Text>
+          <Text style={styles.eyebrow}>Panel del controlador</Text>
           <Text style={styles.title}>{controller?.name || "Controlador"}</Text>
           <Text style={styles.subtitle}>
             Usuario: {user?.fullName || user?.email || "-"}{"\n"}
             {controller?.elfinId || "-"} · {controller?.deviceModel || controller?.dixellModel || "Sin modelo"}
+          </Text>
+          <Text style={styles.explainer}>
+            Acá elegís qué parte querés modificar. Cada sección guarda cambios sobre este controlador puntual del usuario.
           </Text>
         </View>
 
@@ -105,6 +108,11 @@ const styles = StyleSheet.create({
     color: "#CBD5E1",
     lineHeight: 20,
     marginTop: 8,
+  },
+  explainer: {
+    color: "#E2E8F0",
+    lineHeight: 19,
+    marginTop: 12,
   },
   sectionCard: {
     backgroundColor: "#FFFFFF",

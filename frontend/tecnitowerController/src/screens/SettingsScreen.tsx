@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,13 +12,113 @@ import {
 } from "react-native";
 import LinearGradient from "react-native-linear-gradient";
 
-import { DEFAULT_API_BASE_URL, getApiBaseUrl, resetApiBaseUrl, setApiBaseUrl } from "../services/api";
+import {
+  changeCurrentUserPassword,
+  DEFAULT_API_BASE_URL,
+  deleteCurrentUserAccount,
+  getApiBaseUrl,
+  resetApiBaseUrl,
+  setApiBaseUrl,
+} from "../services/api";
 
-export default function SettingsScreen() {
+type Props = {
+  navigation?: any;
+  session?: {
+    token?: string;
+    user?: {
+      fullName?: string;
+      email?: string;
+      role?: "admin" | "user";
+      canWrite?: boolean;
+    };
+  } | null;
+  onLogout?: () => void;
+};
+
+const SUPPORT_EMAIL = "contactotecnitower@gmail.com";
+const PROGRAMMER_SETTINGS_ENABLED = __DEV__;
+
+type SettingsSectionKey =
+  | "support"
+  | "changePassword"
+  | "passwordRecovery"
+  | "privacy"
+  | "deleteAccount"
+  | "backend";
+
+function getRoleLabel(role?: string, canWrite?: boolean) {
+  if (role === "admin") return "Administrador";
+  return canWrite ? "Usuario con edición" : "Usuario solo lectura";
+}
+
+export default function SettingsScreen({ navigation, session, onLogout }: Props) {
+  const [activeSection, setActiveSection] = useState<SettingsSectionKey>("support");
   const [inputValue, setInputValue] = useState("");
   const [currentUrl, setCurrentUrl] = useState(DEFAULT_API_BASE_URL);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingUrl, setSavingUrl] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [deleteSaving, setDeleteSaving] = useState(false);
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [deletePassword, setDeletePassword] = useState("");
+
+  const isAuthenticated = Boolean(session?.token);
+  const isAdmin = session?.user?.role === "admin";
+  const sections = useMemo(
+    () =>
+      [
+        {
+          key: "support" as const,
+          title: "Soporte",
+          description: "Contacto para ayuda técnica o revisión de una instalación.",
+        },
+        isAuthenticated
+          ? {
+              key: "changePassword" as const,
+              title: "Cambiar contraseña",
+              description: "Actualizar la clave de acceso de la cuenta.",
+            }
+          : null,
+        {
+          key: "passwordRecovery" as const,
+          title: "Recuperar contraseña",
+          description: "Iniciar el flujo de recuperación manual.",
+        },
+        {
+          key: "privacy" as const,
+          title: "Políticas de privacidad",
+          description: "Datos de cuenta, telemetría, alertas y uso operativo.",
+        },
+        isAuthenticated
+          ? {
+              key: "deleteAccount" as const,
+              title: "Eliminar cuenta",
+              description: "Borrar la cuenta y sus controladores asociados.",
+            }
+          : null,
+        PROGRAMMER_SETTINGS_ENABLED
+          ? {
+              key: "backend" as const,
+              title: "Backend",
+              description: "Configuración visible solo en modo desarrollo.",
+            }
+          : null,
+      ].filter(Boolean) as Array<{
+        key: SettingsSectionKey;
+        title: string;
+        description: string;
+      }>,
+    [isAuthenticated]
+  );
+
+  useEffect(() => {
+    if (!sections.some((section) => section.key === activeSection)) {
+      setActiveSection(sections[0]?.key || "support");
+    }
+  }, [activeSection, sections]);
 
   useEffect(() => {
     async function load() {
@@ -33,8 +134,24 @@ export default function SettingsScreen() {
     load();
   }, []);
 
-  const handleSave = async () => {
-    setSaving(true);
+  const supportMailTo = useMemo(
+    () =>
+      `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(
+        "Soporte Tecnitower"
+      )}&body=${encodeURIComponent("Hola, necesito ayuda con Tecnitower.")}`,
+    []
+  );
+
+  const handleSupport = async () => {
+    try {
+      await Linking.openURL(supportMailTo);
+    } catch {
+      Alert.alert("Soporte", SUPPORT_EMAIL);
+    }
+  };
+
+  const handleSaveUrl = async () => {
+    setSavingUrl(true);
     try {
       const nextUrl = await setApiBaseUrl(inputValue);
       setCurrentUrl(nextUrl);
@@ -43,12 +160,12 @@ export default function SettingsScreen() {
     } catch (error: any) {
       Alert.alert("Error", error?.message || "No se pudo guardar la URL del backend.");
     } finally {
-      setSaving(false);
+      setSavingUrl(false);
     }
   };
 
-  const handleReset = async () => {
-    setSaving(true);
+  const handleResetUrl = async () => {
+    setSavingUrl(true);
     try {
       const defaultUrl = await resetApiBaseUrl();
       setCurrentUrl(defaultUrl);
@@ -57,90 +174,386 @@ export default function SettingsScreen() {
     } catch (error: any) {
       Alert.alert("Error", error?.message || "No se pudo restablecer la URL.");
     } finally {
-      setSaving(false);
+      setSavingUrl(false);
     }
+  };
+
+  const handleChangePassword = async () => {
+    if (!session?.token) return;
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      Alert.alert("Error", "Completá la contraseña actual, la nueva y la confirmación.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      Alert.alert("Error", "La nueva contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      Alert.alert("Error", "La confirmación no coincide con la nueva contraseña.");
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      const response = await changeCurrentUserPassword(
+        {
+          currentPassword,
+          newPassword,
+        },
+        session.token
+      );
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      Alert.alert("OK", response.message);
+    } catch (error: any) {
+      Alert.alert("Error", error?.message || "No se pudo cambiar la contraseña.");
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    if (!session?.token) return;
+    if (!deletePassword) {
+      Alert.alert("Error", "Ingresá tu contraseña para eliminar la cuenta.");
+      return;
+    }
+
+    Alert.alert(
+      "Eliminar cuenta",
+      "Se eliminará tu cuenta y también los controladores asociados. Esta acción no se puede deshacer.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Eliminar",
+          style: "destructive",
+          onPress: async () => {
+            setDeleteSaving(true);
+            try {
+              const response = await deleteCurrentUserAccount(deletePassword, session.token!);
+              setDeletePassword("");
+              Alert.alert("Cuenta eliminada", response.message, [
+                {
+                  text: "OK",
+                  onPress: () => onLogout?.(),
+                },
+              ]);
+            } catch (error: any) {
+              Alert.alert("Error", error?.message || "No se pudo eliminar la cuenta.");
+            } finally {
+              setDeleteSaving(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
     <LinearGradient
-      colors={["#F2F2F2", "#E6EAF4", "#001F7C"]}
-      start={{ x: 0.5, y: 0 }}
-      end={{ x: 0.5, y: 1 }}
+      colors={["#F2F4F8", "#E7EDF7", "#CFD9F0"]}
+      start={{ x: 0.3, y: 0 }}
+      end={{ x: 0.7, y: 1 }}
       style={styles.container}
     >
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Soporte técnico</Text>
+        <Text style={styles.title}>Ajustes</Text>
+        <Text style={styles.subtitle}>
+          Cuenta, soporte, seguridad y documentación de la aplicación.
+        </Text>
+
+        {isAuthenticated && (
+          <View style={styles.card}>
+            <Text style={styles.label}>Cuenta actual</Text>
+            <Text style={styles.value}>{session?.user?.fullName || "Usuario"}</Text>
+            <Text style={styles.secondaryValue}>{session?.user?.email}</Text>
+            <Text style={styles.hint}>Perfil: {getRoleLabel(session?.user?.role, session?.user?.canWrite)}</Text>
+          </View>
+        )}
 
         <View style={styles.card}>
-          <Text style={styles.label}>Backend actual</Text>
-          {loading ? (
-            <ActivityIndicator color="#001F7C" style={styles.loader} />
-          ) : (
-            <Text style={styles.value}>{currentUrl}</Text>
-          )}
-
-          <Text style={styles.hint}>
-            Esta pantalla es solo para soporte o cambios técnicos del dominio del backend.
-          </Text>
-
-          <Text style={styles.inputLabel}>Nueva URL</Text>
-          <TextInput
-            style={styles.input}
-            value={inputValue}
-            onChangeText={setInputValue}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            placeholder="Ej: http://192.168.1.20:3001"
-            placeholderTextColor="#94A3B8"
-          />
-
-          <View style={styles.buttonRow}>
-            <TouchableOpacity
-              style={[styles.button, styles.primaryButton, saving && styles.buttonDisabled]}
-              onPress={handleSave}
-              disabled={saving}
-            >
-              <Text style={styles.primaryButtonText}>{saving ? "Guardando..." : "Guardar URL"}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.button, styles.secondaryButton, saving && styles.buttonDisabled]}
-              onPress={handleReset}
-              disabled={saving}
-            >
-              <Text style={styles.secondaryButtonText}>Restablecer</Text>
-            </TouchableOpacity>
+          <Text style={styles.sectionTitle}>Secciones</Text>
+          <View style={styles.sectionList}>
+            {sections.map((section) => {
+              const selected = activeSection === section.key;
+              return (
+                <TouchableOpacity
+                  key={section.key}
+                  style={[styles.sectionItem, selected && styles.sectionItemActive]}
+                  onPress={() => setActiveSection(section.key)}
+                >
+                  <View style={styles.sectionItemText}>
+                    <Text style={[styles.sectionItemTitle, selected && styles.sectionItemTitleActive]}>
+                      {section.title}
+                    </Text>
+                    <Text style={[styles.sectionItemDescription, selected && styles.sectionItemDescriptionActive]}>
+                      {section.description}
+                    </Text>
+                  </View>
+                  <Text style={[styles.sectionArrow, selected && styles.sectionArrowActive]}>›</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.label}>URL por defecto del build</Text>
-          <Text style={styles.value}>{DEFAULT_API_BASE_URL}</Text>
-          <Text style={styles.hint}>
-            Si borrás la configuración guardada, la app vuelve a esta URL de producción o desarrollo.
-          </Text>
-        </View>
+        {activeSection === "support" && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Soporte</Text>
+            <Text style={styles.hint}>
+              Si necesitás ayuda, soporte técnico o revisión de una instalación, escribinos a nuestro correo.
+            </Text>
+            <TouchableOpacity style={styles.primaryAction} onPress={handleSupport}>
+              <Text style={styles.primaryActionText}>Escribir a {SUPPORT_EMAIL}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {activeSection === "changePassword" && isAuthenticated && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Cambiar contraseña</Text>
+            <InputField
+              label="Contraseña actual"
+              secureTextEntry
+              value={currentPassword}
+              onChangeText={setCurrentPassword}
+            />
+            <InputField
+              label="Nueva contraseña"
+              secureTextEntry
+              value={newPassword}
+              onChangeText={setNewPassword}
+            />
+            <InputField
+              label="Confirmar nueva contraseña"
+              secureTextEntry
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+            />
+            <TouchableOpacity
+              style={[styles.primaryAction, passwordSaving && styles.buttonDisabled]}
+              onPress={handleChangePassword}
+              disabled={passwordSaving}
+            >
+              <Text style={styles.primaryActionText}>
+                {passwordSaving ? "Guardando..." : "Actualizar contraseña"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {activeSection === "passwordRecovery" && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Recuperar contraseña</Text>
+            <Text style={styles.hint}>
+              Si necesitás iniciar un pedido de recuperación manual, podés usar el flujo de recuperación.
+            </Text>
+            <TouchableOpacity
+              style={styles.secondaryAction}
+              onPress={() => navigation?.navigate?.("PasswordRecovery")}
+            >
+              <Text style={styles.secondaryActionText}>Ir a recuperar contraseña</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {activeSection === "privacy" && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Políticas de privacidad</Text>
+            <Text style={styles.hint}>
+              Tecnitower usa tus datos de cuenta para autenticación, acceso a controladores, soporte técnico,
+              historial operativo y notificaciones. No compartimos credenciales del usuario con terceros fuera
+              de la infraestructura necesaria para operar el servicio.
+            </Text>
+            <Text style={styles.hint}>
+              El uso de la app implica aceptar el tratamiento de datos técnicos de los controladores,
+              telemetría, alertas y datos básicos de cuenta para fines operativos y de soporte.
+            </Text>
+          </View>
+        )}
+
+        {activeSection === "deleteAccount" && isAuthenticated && (
+          <View style={[styles.card, styles.dangerCard]}>
+            <Text style={styles.sectionTitle}>Eliminar cuenta</Text>
+            <Text style={styles.hint}>
+              Esta acción elimina tu cuenta y también los controladores asociados. No se puede deshacer.
+            </Text>
+            <InputField
+              label="Confirmá con tu contraseña"
+              secureTextEntry
+              value={deletePassword}
+              onChangeText={setDeletePassword}
+            />
+            <TouchableOpacity
+              style={[styles.dangerAction, deleteSaving && styles.buttonDisabled]}
+              onPress={handleDeleteAccount}
+              disabled={deleteSaving}
+            >
+              <Text style={styles.dangerActionText}>
+                {deleteSaving ? "Eliminando..." : "Eliminar cuenta"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {activeSection === "backend" && PROGRAMMER_SETTINGS_ENABLED && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Soporte técnico de backend</Text>
+            <Text style={styles.label}>Backend actual</Text>
+            {loading ? (
+              <ActivityIndicator color="#0F172A" style={styles.loader} />
+            ) : (
+              <Text style={styles.value}>{currentUrl}</Text>
+            )}
+
+            <Text style={styles.hint}>
+              Esta sección solo aparece en modo desarrollo para cambios técnicos del dominio del backend.
+            </Text>
+
+            <InputField
+              label="Nueva URL"
+              value={inputValue}
+              onChangeText={setInputValue}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              placeholder="Ej: http://192.168.1.20:3001"
+            />
+
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={[styles.primaryAction, styles.halfButton, savingUrl && styles.buttonDisabled]}
+                onPress={handleSaveUrl}
+                disabled={savingUrl}
+              >
+                <Text style={styles.primaryActionText}>{savingUrl ? "Guardando..." : "Guardar URL"}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.secondaryAction, styles.halfButton, savingUrl && styles.buttonDisabled]}
+                onPress={handleResetUrl}
+                disabled={savingUrl}
+              >
+                <Text style={styles.secondaryActionText}>Restablecer</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={[styles.label, styles.topSpacing]}>URL por defecto del build</Text>
+            <Text style={styles.value}>{DEFAULT_API_BASE_URL}</Text>
+          </View>
+        )}
+
+        {isAdmin && (
+          <View style={styles.adminNoteCard}>
+            <Text style={styles.adminNoteTitle}>Modo administrador</Text>
+            <Text style={styles.adminNoteText}>
+              Desde el panel admin también podés gestionar usuarios, registros, alertas y eliminar cuentas de terceros.
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </LinearGradient>
   );
 }
 
+type InputProps = {
+  label: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  secureTextEntry?: boolean;
+  autoCapitalize?: "none" | "sentences" | "words" | "characters";
+  autoCorrect?: boolean;
+  keyboardType?: "default" | "email-address" | "numeric" | "phone-pad" | "url";
+  placeholder?: string;
+};
+
+function InputField({
+  label,
+  value,
+  onChangeText,
+  secureTextEntry,
+  autoCapitalize,
+  autoCorrect,
+  keyboardType,
+  placeholder,
+}: InputProps) {
+  return (
+    <View style={styles.field}>
+      <Text style={styles.inputLabel}>{label}</Text>
+      <TextInput
+        style={styles.input}
+        value={value}
+        onChangeText={onChangeText}
+        secureTextEntry={secureTextEntry}
+        autoCapitalize={autoCapitalize}
+        autoCorrect={autoCorrect}
+        keyboardType={keyboardType}
+        placeholder={placeholder}
+        placeholderTextColor="#94A3B8"
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 20, paddingTop: 60, paddingBottom: 40 },
-  title: { fontSize: 26, fontWeight: "800", color: "#111827", marginBottom: 16 },
+  content: { padding: 20, paddingTop: 58, paddingBottom: 40 },
+  title: { fontSize: 28, fontWeight: "900", color: "#111827" },
+  subtitle: { color: "#475569", marginTop: 8, marginBottom: 18, lineHeight: 20 },
   card: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 16,
     marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
-  label: { color: "#6B7280", fontSize: 12, fontWeight: "700", textTransform: "uppercase" },
-  value: { color: "#111827", fontSize: 16, fontWeight: "800", marginTop: 8 },
+  dangerCard: {
+    borderColor: "#FECACA",
+    backgroundColor: "#FFF7F7",
+  },
+  adminNoteCard: {
+    backgroundColor: "#0F172A",
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 18,
+  },
+  adminNoteTitle: { color: "#FFFFFF", fontWeight: "900", fontSize: 16 },
+  adminNoteText: { color: "#CBD5E1", marginTop: 8, lineHeight: 20 },
+  label: { color: "#6B7280", fontSize: 12, fontWeight: "800", textTransform: "uppercase" },
+  value: { color: "#111827", fontSize: 16, fontWeight: "900", marginTop: 8 },
+  secondaryValue: { color: "#475569", marginTop: 4 },
+  hint: { color: "#475569", marginTop: 10, lineHeight: 19 },
+  sectionTitle: { color: "#111827", fontSize: 18, fontWeight: "900" },
+  sectionList: { marginTop: 12, gap: 10 },
+  sectionItem: {
+    minHeight: 70,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: "#F8FAFC",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  sectionItemActive: {
+    backgroundColor: "#0F172A",
+    borderColor: "#0F172A",
+  },
+  sectionItemText: { flex: 1 },
+  sectionItemTitle: { color: "#111827", fontSize: 15, fontWeight: "900" },
+  sectionItemTitleActive: { color: "#FFFFFF" },
+  sectionItemDescription: { color: "#64748B", marginTop: 4, lineHeight: 18 },
+  sectionItemDescriptionActive: { color: "#CBD5E1" },
+  sectionArrow: { color: "#64748B", fontSize: 24, fontWeight: "900" },
+  sectionArrowActive: { color: "#FFFFFF" },
   loader: { marginTop: 10, alignSelf: "flex-start" },
-  hint: { color: "#374151", marginTop: 12, lineHeight: 19 },
-  inputLabel: { color: "#111827", fontSize: 13, fontWeight: "700", marginTop: 16, marginBottom: 8 },
+  field: { marginTop: 14 },
+  inputLabel: { color: "#111827", fontSize: 13, fontWeight: "800", marginBottom: 8 },
   input: {
     borderWidth: 1,
     borderColor: "#CBD5E1",
@@ -150,33 +563,35 @@ const styles = StyleSheet.create({
     color: "#111827",
     backgroundColor: "#F8FAFC",
   },
-  buttonRow: {
-    flexDirection: "row",
-    gap: 10,
+  primaryAction: {
     marginTop: 14,
-  },
-  button: {
+    backgroundColor: "#0F172A",
     borderRadius: 14,
-    paddingVertical: 12,
+    paddingVertical: 13,
     paddingHorizontal: 14,
-    flex: 1,
     alignItems: "center",
   },
-  primaryButton: {
-    backgroundColor: "#0F172A",
-  },
-  secondaryButton: {
+  primaryActionText: { color: "#FFFFFF", fontWeight: "900" },
+  secondaryAction: {
+    marginTop: 14,
     backgroundColor: "#E2E8F0",
+    borderRadius: 14,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    alignItems: "center",
   },
-  primaryButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "800",
+  secondaryActionText: { color: "#0F172A", fontWeight: "900" },
+  dangerAction: {
+    marginTop: 14,
+    backgroundColor: "#B91C1C",
+    borderRadius: 14,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    alignItems: "center",
   },
-  secondaryButtonText: {
-    color: "#0F172A",
-    fontWeight: "800",
-  },
-  buttonDisabled: {
-    opacity: 0.65,
-  },
+  dangerActionText: { color: "#FFFFFF", fontWeight: "900" },
+  buttonRow: { flexDirection: "row", gap: 10, marginTop: 2 },
+  halfButton: { flex: 1 },
+  buttonDisabled: { opacity: 0.65 },
+  topSpacing: { marginTop: 16 },
 });

@@ -1,5 +1,6 @@
 import { verifyAccessToken } from "../token/jwtManager.js";
 import { UserModel } from "../models/User.js";
+import { getUserCanWrite, normalizeUserRole } from "../utils/userAccess.js";
 
 export async function requireAuth(req, res, next) {
   try {
@@ -23,7 +24,8 @@ export async function requireAuth(req, res, next) {
     req.user = {
       id: user._id.toString(),
       email: user.email,
-      role: user.role,
+      role: normalizeUserRole(user.role),
+      canWrite: getUserCanWrite(user),
       fullName: user.fullName,
     };
 

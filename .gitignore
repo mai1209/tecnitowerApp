@@ -13,4 +13,5 @@
 
 # Logs
 npm-debug.log*
-yarn-error.log*
+yarn-error.log**firebase-adminsdk*.json
+frontend/tecnitowerController/android/app/*firebase-adminsdk*.json

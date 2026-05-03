@@ -4,6 +4,7 @@ import { readRegistersSnapshotViaElfinTcpClient } from "./elfinTcpClientModbusSe
 import { invalidateDiagnosticCache } from "./diagnosticCacheService.js";
 import { buildControllerRuntimeState } from "./controllerAlertService.js";
 import { publishControllerRealtime } from "./controllerRealtimeService.js";
+import { notifyControllerAlertTransition } from "./pushNotificationService.js";
 
 const POLL_INTERVAL_MS = Number(process.env.CONTROLLER_POLL_INTERVAL_MS ?? 12000);
 const ACTIVE_WINDOW_MS = Number(process.env.CONTROLLER_POLL_ACTIVE_WINDOW_MS ?? 180000);
@@ -148,6 +149,16 @@ async function pollController(controller) {
   }
 
   invalidateDiagnosticCache(controller._id);
+  if (
+    Boolean(controller?.alertState?.active) !== Boolean(runtimeState?.alertState?.active) ||
+    String(controller?.alertState?.type ?? "") !== String(runtimeState?.alertState?.type ?? "")
+  ) {
+    await notifyControllerAlertTransition({
+      controller,
+      previousAlertState: controller?.alertState ?? null,
+      nextAlertState: runtimeState?.alertState ?? null,
+    });
+  }
   if (changed || stateChanged) {
     publishControllerRealtime(controller._id, {
       reason: changed ? "telemetry-changed" : "controller-state-changed",
@@ -172,6 +183,16 @@ async function updateControllerPollingErrorState(controller, error) {
   );
 
   invalidateDiagnosticCache(controller._id);
+  if (
+    Boolean(controller?.alertState?.active) !== Boolean(runtimeState?.alertState?.active) ||
+    String(controller?.alertState?.type ?? "") !== String(runtimeState?.alertState?.type ?? "")
+  ) {
+    await notifyControllerAlertTransition({
+      controller,
+      previousAlertState: controller?.alertState ?? null,
+      nextAlertState: runtimeState?.alertState ?? null,
+    });
+  }
   publishControllerRealtime(controller._id, { reason: "poll-error" });
 }
 

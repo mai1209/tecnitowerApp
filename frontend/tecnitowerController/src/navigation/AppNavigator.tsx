@@ -19,15 +19,45 @@ import DeviceModelAdminScreen from '../screens/DeviceModelAdminScreen';
 import DeviceModelFormScreen from '../screens/DeviceModelFormScreen';
 import { AuthSession } from '../types/auth';
 import { STORAGE_KEYS } from '../constants/storageKeys';
+import {
+  startPushNotificationListeners,
+  syncPushTokenForSession,
+  unregisterCurrentPushToken,
+} from '../services/pushNotifications';
 
 const Stack = createNativeStackNavigator();
+
+function normalizeStoredUser(rawUser: any) {
+  const role = rawUser?.role === "admin" ? "admin" : "user";
+  const canWrite =
+    role === "admin"
+      ? true
+      : typeof rawUser?.canWrite === "boolean"
+        ? rawUser.canWrite
+        : rawUser?.role === "viewer"
+          ? false
+          : true;
+
+  return {
+    _id: String(rawUser?._id ?? rawUser?.id ?? ""),
+    fullName: String(rawUser?.fullName ?? ""),
+    email: String(rawUser?.email ?? ""),
+    role,
+    canWrite,
+  } as AuthSession["user"];
+}
 
 function loadStoredSession(): Promise<AuthSession | null> {
   return AsyncStorage.getItem(STORAGE_KEYS.session).then((raw) => {
     if (!raw) return null;
     try {
       const data = JSON.parse(raw) as AuthSession;
-      if (data?.token && data?.user?._id) return data;
+      if (data?.token && data?.user?._id) {
+        return {
+          token: data.token,
+          user: normalizeStoredUser(data.user),
+        };
+      }
     } catch {
       // ignore
     }
@@ -57,12 +87,34 @@ export const AppNavigator = () => {
   }, []);
 
   const handleLogout = useCallback(() => {
+    if (session?.token) {
+      unregisterCurrentPushToken(session.token).catch(() => {});
+    }
     setSession(null);
-  }, [setSession]);
+  }, [session?.token, setSession]);
 
   const handleLogin = useCallback((newSession: AuthSession) => {
     setSession(newSession);
   }, [setSession]);
+
+  useEffect(() => {
+    if (!session?.token) return;
+
+    let active = true;
+    let stopListeners = () => {};
+
+    syncPushTokenForSession(session.token)
+      .then(() => {
+        if (!active) return;
+        stopListeners = startPushNotificationListeners(session.token);
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+      stopListeners();
+    };
+  }, [session?.token, session?.user?._id]);
 
   if (initializing) {
     return (
@@ -160,10 +212,18 @@ export const AppNavigator = () => {
               )}
             </Stack.Screen>
 
-            <Stack.Screen
-              name="Settings"
-              getComponent={() => require('../screens/SettingsScreen').default}
-            />
+            <Stack.Screen name="Settings">
+              {props => {
+                const SettingsScreen = require('../screens/SettingsScreen').default;
+                return (
+                  <SettingsScreen
+                    {...props}
+                    session={session}
+                    onLogout={handleLogout}
+                  />
+                );
+              }}
+            </Stack.Screen>
             <Stack.Screen
               name="PasswordRecovery"
               getComponent={() => require('../screens/PasswordRecoveryScreen').default}
