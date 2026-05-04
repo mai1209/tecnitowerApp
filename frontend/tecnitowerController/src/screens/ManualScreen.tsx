@@ -66,7 +66,7 @@ function ManualScreen({ navigation }: { navigation: NavigationProp }) {
     () => [
       { label: 'Name', value: 'nombre' },
       { label: 'Protocol', value: 'TCP-CLIENT' },
-      { label: 'Server', value: '137.131.194.247' },
+      { label: 'Server', value: '147.15.48.169' },
       { label: 'Server Port', value: '4001' },
       { label: 'Local Port', value: '0' },
       { label: 'Buffer Size', value: '512' },

@@ -105,7 +105,7 @@ export type SetpointScanResponse = {
 
 
 const LOCAL_API_URL = "http://192.168.100.56:3001";
-const CLOUD_API_URL = "http://192.168.100.56:3001";
+const CLOUD_API_URL = "http://147.15.48.169:3001";
 
 export const DEFAULT_API_BASE_URL = __DEV__
   ? LOCAL_API_URL

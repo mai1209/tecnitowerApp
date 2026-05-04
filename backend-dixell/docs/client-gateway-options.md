@@ -41,7 +41,7 @@ Protocol: Modbus
 ```text
 Name: netp
 Protocol: TCP-CLIENT
-Server: 137.131.194.247
+Server: 147.15.48.169
 Server Port: 4001
 Local Port: 0
 Buffer Size: 512

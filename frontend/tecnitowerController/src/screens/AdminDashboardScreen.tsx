@@ -38,23 +38,16 @@ function getUserModeLabel(user: any) {
   return user?.canWrite === false ? "Usuario solo lectura" : "Usuario con edición";
 }
 
-function buildActiveAlerts(users: any[]) {
-  const alerts = [];
-
-  for (const user of users ?? []) {
-    for (const controller of user?.controllers ?? []) {
-      if (!controller?.alertState?.active) continue;
-      alerts.push({
-        user,
-        controller,
-        type: controller.alertState.type ?? "none",
-        message: controller.alertState.message ?? "Alerta activa",
-        since: controller.alertState.since ?? null,
-      });
-    }
-  }
-
-  return alerts.sort((a, b) => {
+function buildUserAlerts(user: any) {
+  return (user?.controllers ?? [])
+    .filter((controller: any) => controller?.alertState?.active)
+    .map((controller: any) => ({
+      controller,
+      type: controller.alertState.type ?? "none",
+      message: controller.alertState.message ?? "Alerta activa",
+      since: controller.alertState.since ?? null,
+    }))
+    .sort((a: any, b: any) => {
     const aTime = a.since ? new Date(a.since).getTime() : 0;
     const bTime = b.since ? new Date(b.since).getTime() : 0;
     return bTime - aTime;
@@ -66,7 +59,6 @@ export default function AdminDashboardScreen({ navigation, session, onLogout }: 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [deletingUserId, setDeletingUserId] = useState("");
-  const activeAlerts = buildActiveAlerts(users);
 
   useFocusEffect(
     useCallback(() => {
@@ -148,43 +140,6 @@ export default function AdminDashboardScreen({ navigation, session, onLogout }: 
           </View>
         )}
 
-        {!loading && !error && (
-          <View style={styles.alertsCard}>
-            <View style={styles.alertsHeader}>
-              <AlertTriangle color={activeAlerts.length ? "#92400E" : "#64748B"} size={18} />
-              <Text style={styles.alertsTitle}>Alertas activas</Text>
-            </View>
-            <Text style={styles.alertsSubtitle}>
-              {activeAlerts.length
-                ? `${activeAlerts.length} controlador(es) con alerta activa en este momento.`
-                : "No hay alertas activas en usuarios finales."}
-            </Text>
-
-            {activeAlerts.slice(0, 6).map((item) => (
-              <TouchableOpacity
-                key={`${item.user._id}-${item.controller._id}`}
-                style={styles.alertRow}
-                activeOpacity={0.92}
-                onPress={() =>
-                  navigation.navigate("AdminUserControllers", {
-                    userId: item.user._id,
-                    user: item.user,
-                  })
-                }
-              >
-                <View style={styles.alertRowCopy}>
-                  <Text style={styles.alertRowTitle}>{item.controller.name}</Text>
-                  <Text style={styles.alertRowMeta}>
-                    {item.user.fullName || item.user.email} · {item.type}
-                  </Text>
-                  <Text style={styles.alertRowText}>{item.message}</Text>
-                </View>
-                <ChevronRight color="#92400E" size={16} strokeWidth={2.2} />
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
         {!loading && !error && users.length === 0 && (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>No hay usuarios cargados</Text>
@@ -193,6 +148,7 @@ export default function AdminDashboardScreen({ navigation, session, onLogout }: 
 
         {users.map((user) => {
           const preview = buildUserPreview(user);
+          const userAlerts = buildUserAlerts(user);
           return (
             <View key={user._id} style={styles.userCard}>
               <View style={styles.userHeader}>
@@ -259,6 +215,38 @@ export default function AdminDashboardScreen({ navigation, session, onLogout }: 
                   Dispositivos push: {user?.pushDevicesEnabledCount ?? 0}
                 </Text>
               </TouchableOpacity>
+
+              {userAlerts.length > 0 && (
+                <View style={styles.userAlertsCard}>
+                  <View style={styles.userAlertsHeader}>
+                    <AlertTriangle color="#92400E" size={17} strokeWidth={2.3} />
+                    <Text style={styles.userAlertsTitle}>
+                      Alertas activas: {userAlerts.length}
+                    </Text>
+                  </View>
+
+                  {userAlerts.slice(0, 3).map((item: any) => (
+                    <TouchableOpacity
+                      key={item.controller._id}
+                      style={styles.userAlertRow}
+                      activeOpacity={0.92}
+                      onPress={() =>
+                        navigation.navigate("AdminUserControllers", {
+                          userId: user._id,
+                          user,
+                        })
+                      }
+                    >
+                      <View style={styles.alertRowCopy}>
+                        <Text style={styles.alertRowTitle}>{item.controller.name}</Text>
+                        <Text style={styles.alertRowMeta}>{item.type}</Text>
+                        <Text style={styles.alertRowText}>{item.message}</Text>
+                      </View>
+                      <ChevronRight color="#92400E" size={16} strokeWidth={2.2} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
           );
         })}
@@ -331,35 +319,29 @@ const styles = StyleSheet.create({
     marginTop: 6,
     lineHeight: 18,
   },
-  alertsCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 14,
+  userAlertsCard: {
+    backgroundColor: "#FFFBEB",
+    borderRadius: 16,
+    padding: 12,
+    marginTop: 12,
     borderWidth: 1,
     borderColor: "#FDE68A",
   },
-  alertsHeader: {
+  userAlertsHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
-  alertsTitle: {
+  userAlertsTitle: {
     color: "#111827",
-    fontSize: 16,
     fontWeight: "900",
   },
-  alertsSubtitle: {
-    color: "#64748B",
-    lineHeight: 18,
-    marginTop: 8,
-  },
-  alertRow: {
+  userAlertRow: {
     marginTop: 12,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "#FDE68A",
-    backgroundColor: "#FFFBEB",
+    backgroundColor: "#FFFFFF",
     padding: 12,
     flexDirection: "row",
     alignItems: "center",

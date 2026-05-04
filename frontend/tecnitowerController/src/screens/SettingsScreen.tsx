@@ -1,6 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
   Linking,
   ScrollView,
@@ -14,11 +13,7 @@ import LinearGradient from "react-native-linear-gradient";
 
 import {
   changeCurrentUserPassword,
-  DEFAULT_API_BASE_URL,
   deleteCurrentUserAccount,
-  getApiBaseUrl,
-  resetApiBaseUrl,
-  setApiBaseUrl,
 } from "../services/api";
 
 type Props = {
@@ -36,15 +31,13 @@ type Props = {
 };
 
 const SUPPORT_EMAIL = "contactotecnitower@gmail.com";
-const PROGRAMMER_SETTINGS_ENABLED = __DEV__;
 
 type SettingsSectionKey =
   | "support"
   | "changePassword"
   | "passwordRecovery"
   | "privacy"
-  | "deleteAccount"
-  | "backend";
+  | "deleteAccount";
 
 function getRoleLabel(role?: string, canWrite?: boolean) {
   if (role === "admin") return "Administrador";
@@ -52,11 +45,10 @@ function getRoleLabel(role?: string, canWrite?: boolean) {
 }
 
 export default function SettingsScreen({ navigation, session, onLogout }: Props) {
+  const scrollViewRef = useRef<ScrollView | null>(null);
+  const panelYRef = useRef(0);
+  const shouldScrollToPanelRef = useRef(false);
   const [activeSection, setActiveSection] = useState<SettingsSectionKey>("support");
-  const [inputValue, setInputValue] = useState("");
-  const [currentUrl, setCurrentUrl] = useState(DEFAULT_API_BASE_URL);
-  const [loading, setLoading] = useState(true);
-  const [savingUrl, setSavingUrl] = useState(false);
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [deleteSaving, setDeleteSaving] = useState(false);
 
@@ -66,7 +58,6 @@ export default function SettingsScreen({ navigation, session, onLogout }: Props)
   const [deletePassword, setDeletePassword] = useState("");
 
   const isAuthenticated = Boolean(session?.token);
-  const isAdmin = session?.user?.role === "admin";
   const sections = useMemo(
     () =>
       [
@@ -99,13 +90,6 @@ export default function SettingsScreen({ navigation, session, onLogout }: Props)
               description: "Borrar la cuenta y sus controladores asociados.",
             }
           : null,
-        PROGRAMMER_SETTINGS_ENABLED
-          ? {
-              key: "backend" as const,
-              title: "Backend",
-              description: "Configuración visible solo en modo desarrollo.",
-            }
-          : null,
       ].filter(Boolean) as Array<{
         key: SettingsSectionKey;
         title: string;
@@ -121,18 +105,18 @@ export default function SettingsScreen({ navigation, session, onLogout }: Props)
   }, [activeSection, sections]);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const url = await getApiBaseUrl();
-        setCurrentUrl(url);
-        setInputValue(url);
-      } finally {
-        setLoading(false);
-      }
-    }
+    if (!shouldScrollToPanelRef.current) return;
 
-    load();
-  }, []);
+    const timeout = setTimeout(() => {
+      scrollViewRef.current?.scrollTo({
+        y: Math.max(panelYRef.current - 12, 0),
+        animated: true,
+      });
+      shouldScrollToPanelRef.current = false;
+    }, 80);
+
+    return () => clearTimeout(timeout);
+  }, [activeSection]);
 
   const supportMailTo = useMemo(
     () =>
@@ -150,33 +134,11 @@ export default function SettingsScreen({ navigation, session, onLogout }: Props)
     }
   };
 
-  const handleSaveUrl = async () => {
-    setSavingUrl(true);
-    try {
-      const nextUrl = await setApiBaseUrl(inputValue);
-      setCurrentUrl(nextUrl);
-      setInputValue(nextUrl);
-      Alert.alert("Configuración guardada", "La app usará esta URL en las próximas consultas.");
-    } catch (error: any) {
-      Alert.alert("Error", error?.message || "No se pudo guardar la URL del backend.");
-    } finally {
-      setSavingUrl(false);
-    }
+  const handleSelectSection = (sectionKey: SettingsSectionKey) => {
+    shouldScrollToPanelRef.current = true;
+    setActiveSection(sectionKey);
   };
 
-  const handleResetUrl = async () => {
-    setSavingUrl(true);
-    try {
-      const defaultUrl = await resetApiBaseUrl();
-      setCurrentUrl(defaultUrl);
-      setInputValue(defaultUrl);
-      Alert.alert("URL restablecida", "Se volvió a la URL por defecto de esta compilación.");
-    } catch (error: any) {
-      Alert.alert("Error", error?.message || "No se pudo restablecer la URL.");
-    } finally {
-      setSavingUrl(false);
-    }
-  };
 
   const handleChangePassword = async () => {
     if (!session?.token) return;
@@ -257,7 +219,7 @@ export default function SettingsScreen({ navigation, session, onLogout }: Props)
       end={{ x: 0.7, y: 1 }}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView ref={scrollViewRef} contentContainerStyle={styles.content}>
         <Text style={styles.title}>Ajustes</Text>
         <Text style={styles.subtitle}>
           Cuenta, soporte, seguridad y documentación de la aplicación.
@@ -281,7 +243,7 @@ export default function SettingsScreen({ navigation, session, onLogout }: Props)
                 <TouchableOpacity
                   key={section.key}
                   style={[styles.sectionItem, selected && styles.sectionItemActive]}
-                  onPress={() => setActiveSection(section.key)}
+                  onPress={() => handleSelectSection(section.key)}
                 >
                   <View style={styles.sectionItemText}>
                     <Text style={[styles.sectionItemTitle, selected && styles.sectionItemTitleActive]}>
@@ -298,160 +260,106 @@ export default function SettingsScreen({ navigation, session, onLogout }: Props)
           </View>
         </View>
 
-        {activeSection === "support" && (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Soporte</Text>
-            <Text style={styles.hint}>
-              Si necesitás ayuda, soporte técnico o revisión de una instalación, escribinos a nuestro correo.
-            </Text>
-            <TouchableOpacity style={styles.primaryAction} onPress={handleSupport}>
-              <Text style={styles.primaryActionText}>Escribir a {SUPPORT_EMAIL}</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {activeSection === "changePassword" && isAuthenticated && (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Cambiar contraseña</Text>
-            <InputField
-              label="Contraseña actual"
-              secureTextEntry
-              value={currentPassword}
-              onChangeText={setCurrentPassword}
-            />
-            <InputField
-              label="Nueva contraseña"
-              secureTextEntry
-              value={newPassword}
-              onChangeText={setNewPassword}
-            />
-            <InputField
-              label="Confirmar nueva contraseña"
-              secureTextEntry
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-            />
-            <TouchableOpacity
-              style={[styles.primaryAction, passwordSaving && styles.buttonDisabled]}
-              onPress={handleChangePassword}
-              disabled={passwordSaving}
-            >
-              <Text style={styles.primaryActionText}>
-                {passwordSaving ? "Guardando..." : "Actualizar contraseña"}
+        <View onLayout={(event) => { panelYRef.current = event.nativeEvent.layout.y; }}>
+          {activeSection === "support" && (
+            <View style={styles.card}>
+              <Text style={styles.sectionTitle}>Soporte</Text>
+              <Text style={styles.hint}>
+                Si necesitás ayuda, soporte técnico o revisión de una instalación, escribinos a nuestro correo.
               </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {activeSection === "passwordRecovery" && (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Recuperar contraseña</Text>
-            <Text style={styles.hint}>
-              Si necesitás iniciar un pedido de recuperación manual, podés usar el flujo de recuperación.
-            </Text>
-            <TouchableOpacity
-              style={styles.secondaryAction}
-              onPress={() => navigation?.navigate?.("PasswordRecovery")}
-            >
-              <Text style={styles.secondaryActionText}>Ir a recuperar contraseña</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {activeSection === "privacy" && (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Políticas de privacidad</Text>
-            <Text style={styles.hint}>
-              Tecnitower usa tus datos de cuenta para autenticación, acceso a controladores, soporte técnico,
-              historial operativo y notificaciones. No compartimos credenciales del usuario con terceros fuera
-              de la infraestructura necesaria para operar el servicio.
-            </Text>
-            <Text style={styles.hint}>
-              El uso de la app implica aceptar el tratamiento de datos técnicos de los controladores,
-              telemetría, alertas y datos básicos de cuenta para fines operativos y de soporte.
-            </Text>
-          </View>
-        )}
-
-        {activeSection === "deleteAccount" && isAuthenticated && (
-          <View style={[styles.card, styles.dangerCard]}>
-            <Text style={styles.sectionTitle}>Eliminar cuenta</Text>
-            <Text style={styles.hint}>
-              Esta acción elimina tu cuenta y también los controladores asociados. No se puede deshacer.
-            </Text>
-            <InputField
-              label="Confirmá con tu contraseña"
-              secureTextEntry
-              value={deletePassword}
-              onChangeText={setDeletePassword}
-            />
-            <TouchableOpacity
-              style={[styles.dangerAction, deleteSaving && styles.buttonDisabled]}
-              onPress={handleDeleteAccount}
-              disabled={deleteSaving}
-            >
-              <Text style={styles.dangerActionText}>
-                {deleteSaving ? "Eliminando..." : "Eliminar cuenta"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {activeSection === "backend" && PROGRAMMER_SETTINGS_ENABLED && (
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Soporte técnico de backend</Text>
-            <Text style={styles.label}>Backend actual</Text>
-            {loading ? (
-              <ActivityIndicator color="#0F172A" style={styles.loader} />
-            ) : (
-              <Text style={styles.value}>{currentUrl}</Text>
-            )}
-
-            <Text style={styles.hint}>
-              Esta sección solo aparece en modo desarrollo para cambios técnicos del dominio del backend.
-            </Text>
-
-            <InputField
-              label="Nueva URL"
-              value={inputValue}
-              onChangeText={setInputValue}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              placeholder="Ej: http://192.168.1.20:3001"
-            />
-
-            <View style={styles.buttonRow}>
-              <TouchableOpacity
-                style={[styles.primaryAction, styles.halfButton, savingUrl && styles.buttonDisabled]}
-                onPress={handleSaveUrl}
-                disabled={savingUrl}
-              >
-                <Text style={styles.primaryActionText}>{savingUrl ? "Guardando..." : "Guardar URL"}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.secondaryAction, styles.halfButton, savingUrl && styles.buttonDisabled]}
-                onPress={handleResetUrl}
-                disabled={savingUrl}
-              >
-                <Text style={styles.secondaryActionText}>Restablecer</Text>
+              <TouchableOpacity style={styles.primaryAction} onPress={handleSupport}>
+                <Text style={styles.primaryActionText}>Escribir a {SUPPORT_EMAIL}</Text>
               </TouchableOpacity>
             </View>
+          )}
 
-            <Text style={[styles.label, styles.topSpacing]}>URL por defecto del build</Text>
-            <Text style={styles.value}>{DEFAULT_API_BASE_URL}</Text>
-          </View>
-        )}
+          {activeSection === "changePassword" && isAuthenticated && (
+            <View style={styles.card}>
+              <Text style={styles.sectionTitle}>Cambiar contraseña</Text>
+              <InputField
+                label="Contraseña actual"
+                secureTextEntry
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+              />
+              <InputField
+                label="Nueva contraseña"
+                secureTextEntry
+                value={newPassword}
+                onChangeText={setNewPassword}
+              />
+              <InputField
+                label="Confirmar nueva contraseña"
+                secureTextEntry
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+              />
+              <TouchableOpacity
+                style={[styles.primaryAction, passwordSaving && styles.buttonDisabled]}
+                onPress={handleChangePassword}
+                disabled={passwordSaving}
+              >
+                <Text style={styles.primaryActionText}>
+                  {passwordSaving ? "Guardando..." : "Actualizar contraseña"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
-        {isAdmin && (
-          <View style={styles.adminNoteCard}>
-            <Text style={styles.adminNoteTitle}>Modo administrador</Text>
-            <Text style={styles.adminNoteText}>
-              Desde el panel admin también podés gestionar usuarios, registros, alertas y eliminar cuentas de terceros.
-            </Text>
-          </View>
-        )}
+          {activeSection === "passwordRecovery" && (
+            <View style={styles.card}>
+              <Text style={styles.sectionTitle}>Recuperar contraseña</Text>
+              <Text style={styles.hint}>
+                Si necesitás iniciar un pedido de recuperación manual, podés usar el flujo de recuperación.
+              </Text>
+              <TouchableOpacity
+                style={styles.secondaryAction}
+                onPress={() => navigation?.navigate?.("PasswordRecovery")}
+              >
+                <Text style={styles.secondaryActionText}>Ir a recuperar contraseña</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {activeSection === "privacy" && (
+            <View style={styles.card}>
+              <Text style={styles.sectionTitle}>Políticas de privacidad</Text>
+              <Text style={styles.hint}>
+                Tecnitower usa tus datos de cuenta para autenticación, acceso a controladores, soporte técnico,
+                historial operativo y notificaciones. No compartimos credenciales del usuario con terceros fuera
+                de la infraestructura necesaria para operar el servicio.
+              </Text>
+              <Text style={styles.hint}>
+                El uso de la app implica aceptar el tratamiento de datos técnicos de los controladores,
+                telemetría, alertas y datos básicos de cuenta para fines operativos y de soporte.
+              </Text>
+            </View>
+          )}
+
+          {activeSection === "deleteAccount" && isAuthenticated && (
+            <View style={[styles.card, styles.dangerCard]}>
+              <Text style={styles.sectionTitle}>Eliminar cuenta</Text>
+              <Text style={styles.hint}>
+                Esta acción elimina tu cuenta y también los controladores asociados. No se puede deshacer.
+              </Text>
+              <InputField
+                label="Confirmá con tu contraseña"
+                secureTextEntry
+                value={deletePassword}
+                onChangeText={setDeletePassword}
+              />
+              <TouchableOpacity
+                style={[styles.dangerAction, deleteSaving && styles.buttonDisabled]}
+                onPress={handleDeleteAccount}
+                disabled={deleteSaving}
+              >
+                <Text style={styles.dangerActionText}>
+                  {deleteSaving ? "Eliminando..." : "Eliminar cuenta"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
       </ScrollView>
     </LinearGradient>
   );

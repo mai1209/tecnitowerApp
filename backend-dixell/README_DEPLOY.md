@@ -106,7 +106,7 @@ Protocol: Modbus
 ```text
 Name: netp
 Protocol: TCP-CLIENT
-Server: 137.131.194.247
+Server: 147.15.48.169
 Server Port: 4001
 Local Port: 0
 Buffer Size: 512
@@ -143,8 +143,8 @@ Los registros reales del modelo se completan desde el modelo seleccionado y qued
 Verificar backend:
 
 ```bash
-curl http://137.131.194.247:3001/api/health
-nc -vz -w 3 137.131.194.247 4001
+curl http://147.15.48.169:3001/api/health
+nc -vz -w 3 147.15.48.169 4001
 ```
 
 En logs de Oracle deben verse tramas `tx` y `rx`:

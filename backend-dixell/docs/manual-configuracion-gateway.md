@@ -15,7 +15,7 @@ App movil
 Antes de empezar, el tecnico tiene que tener estos datos:
 
 - WiFi del local: `SSID` y clave
-- IP publica del backend Oracle: `137.131.194.247`
+- IP publica del backend Oracle: `147.15.48.169`
 - Puerto TCP del gateway: `4001`
 - `elfinId` unico del equipo
 - `unitId` del controlador
@@ -83,7 +83,7 @@ En `Communication Settings` dejar:
 
 ### Socket Settings
 
-- Server: `137.131.194.247`
+- Server: `147.15.48.169`
 - Server Port: `4001`
 - Local Port: `0`
 - Buffer Size: `512`
@@ -195,7 +195,7 @@ DEBUG_TCP_GATEWAY=0
 Entrar por SSH:
 
 ```bash
-ssh -i /Users/maidev/Desktop/Codex/ssh-key-2026-04-09.key ubuntu@137.131.194.247
+ssh -i /Users/maidev/Desktop/Codex/ssh-key-2026-04-09.key ubuntu@147.15.48.169
 ```
 
 Editar `.env`:
@@ -229,8 +229,8 @@ sudo journalctl -u tecnitower-backend -f
 Verificar backend Oracle:
 
 ```bash
-curl http://137.131.194.247:3001/api/health
-nc -vz -w 3 137.131.194.247 4001
+curl http://147.15.48.169:3001/api/health
+nc -vz -w 3 147.15.48.169 4001
 ```
 
 ### En logs de Oracle
@@ -271,7 +271,7 @@ Si funciona correctamente:
 
 Para nuevas instalaciones, el socket cloud del Elfin puede repetirse siempre:
 
-- Server: `137.131.194.247`
+- Server: `147.15.48.169`
 - Port: `4001`
 - Connect Mode: `Always`
 - Register Mode: `Link`
