@@ -8,9 +8,13 @@ import { notifyControllerAlertTransition } from "./pushNotificationService.js";
 
 const POLL_INTERVAL_MS = Number(process.env.CONTROLLER_POLL_INTERVAL_MS ?? 12000);
 const ACTIVE_WINDOW_MS = Number(process.env.CONTROLLER_POLL_ACTIVE_WINDOW_MS ?? 180000);
+const BACKGROUND_POLL_INTERVAL_MS = Number(
+  process.env.CONTROLLER_BACKGROUND_POLL_INTERVAL_MS ?? 60000
+);
 
 const activeControllers = new Map();
 let pollTimer = null;
+let backgroundPollTimer = null;
 let pollInFlight = false;
 
 function now() {
@@ -235,6 +239,32 @@ async function runPollingCycle() {
   }
 }
 
+async function runBackgroundPollingCycle() {
+  if (!isFinitePositive(BACKGROUND_POLL_INTERVAL_MS)) return;
+  if (pollInFlight) return;
+  pollInFlight = true;
+
+  try {
+    const controllers = await ControllerModel.find({
+      gatewayMode: "tcp-client",
+    }).lean();
+
+    for (const controller of controllers) {
+      try {
+        await pollController(controller);
+      } catch (error) {
+        await updateControllerPollingErrorState(controller, error);
+        console.warn(
+          `[POLL BACKGROUND] ${controller?.elfinId || controller?._id} error:`,
+          error?.message || error
+        );
+      }
+    }
+  } finally {
+    pollInFlight = false;
+  }
+}
+
 export function touchControllerPolling(controllerId) {
   const normalized = normalizeControllerId(controllerId);
   if (!normalized) return;
@@ -255,11 +285,27 @@ export function startControllerPollingService() {
   }
 
   console.log(`[POLL] activo cada ${getPollIntervalMs()} ms`);
+
+  if (isFinitePositive(BACKGROUND_POLL_INTERVAL_MS)) {
+    backgroundPollTimer = setInterval(() => {
+      runBackgroundPollingCycle().catch((error) => {
+        console.error("[POLL BACKGROUND] cycle error:", error?.message || error);
+      });
+    }, BACKGROUND_POLL_INTERVAL_MS);
+
+    if (typeof backgroundPollTimer?.unref === "function") {
+      backgroundPollTimer.unref();
+    }
+
+    console.log(`[POLL BACKGROUND] activo cada ${BACKGROUND_POLL_INTERVAL_MS} ms`);
+  }
+
   return pollTimer;
 }
 
 export async function stopControllerPollingService() {
-  if (!pollTimer) return;
-  clearInterval(pollTimer);
+  if (pollTimer) clearInterval(pollTimer);
+  if (backgroundPollTimer) clearInterval(backgroundPollTimer);
   pollTimer = null;
+  backgroundPollTimer = null;
 }

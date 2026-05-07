@@ -13,6 +13,7 @@ const READY_DELAY_MS = Number(process.env.TCP_GATEWAY_READY_DELAY_MS ?? 400);
 // Intervalo de keep-alive TCP en ms. Mantiene viva la conexión NAT
 // en routers domésticos/industriales que cierran sesiones idle.
 const KEEP_ALIVE_INTERVAL_MS = Number(process.env.TCP_GATEWAY_KEEP_ALIVE_MS ?? 10000);
+const DESTROY_AFTER_TIMEOUTS = Number(process.env.TCP_GATEWAY_DESTROY_AFTER_TIMEOUTS ?? 2);
 
 let tcpServer = null;
 const connections = new Map();
@@ -28,6 +29,10 @@ function canonicalizeElfinId(value = "") {
 }
 
 function looksLikeElfinId(value = "") {
+  const raw = String(value ?? "").trim().toUpperCase();
+  if (/^(GET|POST|HEAD|PUT|DELETE|OPTIONS|TRACE|CONNECT)\s|^GETHTTP/.test(raw)) {
+    return false;
+  }
   const normalized = canonicalizeElfinId(value);
   return normalized.length >= 8 && /\d/.test(normalized);
 }
@@ -87,6 +92,15 @@ function detachConnection(state) {
   }
 }
 
+function destroyConnection(state, reason = "socket descartado") {
+  if (!state?.socket || state.socket.destroyed) return;
+  console.warn(`${logPrefix(state)} ${reason}; cerrando socket para forzar reconexión`);
+  detachConnection(state);
+  try {
+    state.socket.destroy();
+  } catch (_) {}
+}
+
 // ─── identificación del Elfin ──────────────────────────────────────────────────
 
 function tryRegisterElfin(state, chunk) {
@@ -139,6 +153,7 @@ function resolvePending(state) {
 
   clearTimeout(pending.timeout);
   state.pending = null;
+  state.commandTimeouts = 0;
   state.buffer = state.buffer.subarray(match.consumedBytes ?? state.buffer.length);
   pending.resolve(Buffer.from(match.frame));
 }
@@ -186,6 +201,7 @@ function createConnectionState(socket) {
     registeredAt: null,
     lastSeenAt: null,
     ready: false,
+    commandTimeouts: 0,
     identityBuffer: "",
     buffer: Buffer.alloc(0),
     pending: null,
@@ -306,6 +322,17 @@ export function sendTcpClientRawCommand(
     const timer = setTimeout(() => {
       if (state.pending?.timeout === timer) {
         state.pending = null;
+      }
+      state.commandTimeouts = (state.commandTimeouts ?? 0) + 1;
+      if (
+        Number.isFinite(DESTROY_AFTER_TIMEOUTS) &&
+        DESTROY_AFTER_TIMEOUTS > 0 &&
+        state.commandTimeouts >= DESTROY_AFTER_TIMEOUTS
+      ) {
+        destroyConnection(
+          state,
+          `sin respuesta Modbus tras ${state.commandTimeouts} timeout(s)`
+        );
       }
       reject(
         new Error(`Timeout esperando respuesta TCP del Elfin (${normalizedElfinId})`)
