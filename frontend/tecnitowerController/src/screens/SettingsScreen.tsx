@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  KeyboardAvoidingView,
   Linking,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -31,6 +33,49 @@ type Props = {
 };
 
 const SUPPORT_EMAIL = "contactotecnitower@gmail.com";
+
+const PRIVACY_POLICY_SECTIONS = [
+  {
+    title: "Responsable del tratamiento",
+    body:
+      "Tecnitower S.A. opera esta aplicación para monitoreo, configuración y soporte de controladores de refrigeración. Para consultas de privacidad o soporte podés escribir a contactotecnitower@gmail.com.",
+  },
+  {
+    title: "Datos de cuenta",
+    body:
+      "Recolectamos nombre o empresa, correo electrónico, rol de usuario, permisos de edición y credenciales protegidas para crear la cuenta, iniciar sesión, administrar accesos y brindar soporte.",
+  },
+  {
+    title: "Datos técnicos y operativos",
+    body:
+      "La app procesa datos de controladores, identificadores de Elfin, configuración Modbus, temperaturas, setpoints, alertas, estados de conexión, eventos técnicos y registros necesarios para operar el servicio.",
+  },
+  {
+    title: "Notificaciones",
+    body:
+      "Si aceptás recibir notificaciones push, guardamos un identificador del dispositivo para enviarte alertas operativas, avisos de temperatura y estados relevantes de los equipos asociados a tu cuenta.",
+  },
+  {
+    title: "Uso de la información",
+    body:
+      "Usamos la información para autenticar usuarios, mostrar controladores asignados, ejecutar comandos autorizados, detectar fallas, enviar alertas, mejorar estabilidad y responder solicitudes de soporte.",
+  },
+  {
+    title: "Terceros e infraestructura",
+    body:
+      "Podemos usar servicios de infraestructura, base de datos, hosting y mensajería push necesarios para que la app funcione. No vendemos datos personales ni compartimos credenciales con terceros para publicidad.",
+  },
+  {
+    title: "Seguridad y conservación",
+    body:
+      "Las contraseñas se almacenan con hash y los accesos se protegen con tokens. Conservamos datos de cuenta y operación mientras la cuenta esté activa o mientras sean necesarios para soporte, seguridad y obligaciones legales.",
+  },
+  {
+    title: "Derechos del usuario",
+    body:
+      "Podés solicitar acceso, corrección o eliminación de tus datos desde Ajustes o escribiendo a soporte. Al eliminar la cuenta se remueven también los controladores asociados, salvo información que deba conservarse por motivos legales o de seguridad.",
+  },
+];
 
 type SettingsSectionKey =
   | "support"
@@ -76,7 +121,7 @@ export default function SettingsScreen({ navigation, session, onLogout }: Props)
         {
           key: "passwordRecovery" as const,
           title: "Recuperar contraseña",
-          description: "Iniciar el flujo de recuperación manual.",
+          description: "Restablecer la clave con un código de verificación.",
         },
         {
           key: "privacy" as const,
@@ -219,7 +264,17 @@ export default function SettingsScreen({ navigation, session, onLogout }: Props)
       end={{ x: 0.7, y: 1 }}
       style={styles.container}
     >
-      <ScrollView ref={scrollViewRef} contentContainerStyle={styles.content}>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoider}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+      >
+      <ScrollView
+        ref={scrollViewRef}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+      >
         <Text style={styles.title}>Ajustes</Text>
         <Text style={styles.subtitle}>
           Cuenta, soporte, seguridad y documentación de la aplicación.
@@ -310,7 +365,7 @@ export default function SettingsScreen({ navigation, session, onLogout }: Props)
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Recuperar contraseña</Text>
               <Text style={styles.hint}>
-                Si necesitás iniciar un pedido de recuperación manual, podés usar el flujo de recuperación.
+                Si olvidaste tu clave, podés recibir un código de verificación y crear una nueva contraseña.
               </Text>
               <TouchableOpacity
                 style={styles.secondaryAction}
@@ -324,15 +379,12 @@ export default function SettingsScreen({ navigation, session, onLogout }: Props)
           {activeSection === "privacy" && (
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Políticas de privacidad</Text>
-              <Text style={styles.hint}>
-                Tecnitower usa tus datos de cuenta para autenticación, acceso a controladores, soporte técnico,
-                historial operativo y notificaciones. No compartimos credenciales del usuario con terceros fuera
-                de la infraestructura necesaria para operar el servicio.
-              </Text>
-              <Text style={styles.hint}>
-                El uso de la app implica aceptar el tratamiento de datos técnicos de los controladores,
-                telemetría, alertas y datos básicos de cuenta para fines operativos y de soporte.
-              </Text>
+              {PRIVACY_POLICY_SECTIONS.map((section) => (
+                <View key={section.title} style={styles.privacyBlock}>
+                  <Text style={styles.privacyTitle}>{section.title}</Text>
+                  <Text style={styles.hint}>{section.body}</Text>
+                </View>
+              ))}
             </View>
           )}
 
@@ -361,6 +413,7 @@ export default function SettingsScreen({ navigation, session, onLogout }: Props)
           )}
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </LinearGradient>
   );
 }
@@ -406,7 +459,8 @@ function InputField({
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 20, paddingTop: 58, paddingBottom: 40 },
+  keyboardAvoider: { flex: 1 },
+  content: { padding: 20, paddingTop: 58, paddingBottom: 72 },
   title: { fontSize: 28, fontWeight: "900", color: "#111827" },
   subtitle: { color: "#475569", marginTop: 8, marginBottom: 18, lineHeight: 20 },
   card: {
@@ -433,6 +487,8 @@ const styles = StyleSheet.create({
   value: { color: "#111827", fontSize: 16, fontWeight: "900", marginTop: 8 },
   secondaryValue: { color: "#475569", marginTop: 4 },
   hint: { color: "#475569", marginTop: 10, lineHeight: 19 },
+  privacyBlock: { marginTop: 10 },
+  privacyTitle: { color: "#111827", fontSize: 14, fontWeight: "900", marginTop: 6 },
   sectionTitle: { color: "#111827", fontSize: 18, fontWeight: "900" },
   sectionList: { marginTop: 12, gap: 10 },
   sectionItem: {

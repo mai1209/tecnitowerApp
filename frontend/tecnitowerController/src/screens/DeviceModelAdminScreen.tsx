@@ -13,22 +13,19 @@ import AppLayout from "../layouts/AppLayout";
 import { fetchDeviceModels } from "../services/api";
 
 const COLORS = {
-  bg: "#F3F6FB",
+  bg: "#F5F7FA",
   surface: "#FFFFFF",
   surfaceSoft: "#F8FAFC",
-  dark: "#0F172A",
-  darkSoft: "#1E293B",
-  primary: "#001F7C",
-  primaryLight: "#DBEAFE",
-  primaryText: "#1D4ED8",
-  border: "#E2E8F0",
+  text: "#0F172A",
   muted: "#64748B",
-  mutedDark: "#475569",
-  text: "#111827",
+  mutedSoft: "#94A3B8",
+  border: "#E2E8F0",
+  primary: "#0F3D91",
+  primarySoft: "#E8F0FF",
+  primaryBorder: "#C7D9FF",
   white: "#FFFFFF",
   danger: "#991B1B",
-  dangerBg: "#FEE2E2",
-  successSoft: "#ECFDF5",
+  dangerBg: "#FEF2F2",
 };
 
 export default function DeviceModelAdminScreen({
@@ -79,42 +76,41 @@ export default function DeviceModelAdminScreen({
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.container}
       >
-        <View style={styles.hero}>
-          <View style={styles.heroTopRow}>
-            <View style={styles.heroIconWrap}>
-              <Shapes color={COLORS.white} size={22} strokeWidth={2.3} />
-            </View>
-
-            <View style={styles.heroBadge}>
-              <Text style={styles.heroBadgeText}>
-                {models.length} modelos
-              </Text>
-            </View>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.kicker}>Panel técnico</Text>
+            <Text style={styles.title}>Modelos de controladores</Text>
           </View>
 
-          <Text style={styles.eyebrow}>Carga de modelos y registros</Text>
-
-          <Text style={styles.title}>Modelos cargados</Text>
-
-          <Text style={styles.subtitle}>
-            Acá ves todos los modelos cargados. Desde cada uno podés editar el
-            modelo o cargar nuevos registros.
-          </Text>
-
-          <TouchableOpacity
-            style={styles.primaryAction}
-            activeOpacity={0.9}
-            onPress={() => navigation.navigate("DeviceModelForm")}
-          >
-            <FilePlus2 color={COLORS.white} size={17} strokeWidth={2.4} />
-            <Text style={styles.primaryActionText}>Cargar nuevo modelo</Text>
-          </TouchableOpacity>
+          <View style={styles.countBox}>
+            <Text style={styles.countNumber}>{models.length}</Text>
+            <Text style={styles.countLabel}>modelos</Text>
+          </View>
         </View>
 
+        <TouchableOpacity
+          style={styles.createCard}
+          activeOpacity={0.9}
+          onPress={() => navigation.navigate("DeviceModelForm")}
+        >
+          <View style={styles.createIcon}>
+            <FilePlus2 color={COLORS.primary} size={24} strokeWidth={2.4} />
+          </View>
+
+          <View style={styles.createCopy}>
+            <Text style={styles.createTitle}>Cargar nuevo modelo</Text>
+            <Text style={styles.createMeta}>Agregar controlador y registros base</Text>
+          </View>
+
+          <View style={styles.createPlus}>
+            <Plus color={COLORS.white} size={18} strokeWidth={2.6} />
+          </View>
+        </TouchableOpacity>
+
         {loading && (
-          <View style={styles.loadingCard}>
+          <View style={styles.stateCard}>
             <ActivityIndicator color={COLORS.primary} />
-            <Text style={styles.loadingText}>Cargando modelos...</Text>
+            <Text style={styles.stateText}>Cargando modelos...</Text>
           </View>
         )}
 
@@ -127,15 +123,11 @@ export default function DeviceModelAdminScreen({
 
         {!loading && models.length === 0 && (
           <View style={styles.emptyCard}>
-            <View style={styles.emptyIconWrap}>
-              <FilePlus2 color={COLORS.primary} size={24} strokeWidth={2.3} />
+            <View style={styles.emptyIcon}>
+              <Shapes color={COLORS.primary} size={26} strokeWidth={2.4} />
             </View>
 
             <Text style={styles.emptyTitle}>No hay modelos cargados</Text>
-
-            <Text style={styles.emptyText}>
-              Empezá creando el primero desde “Cargar nuevo modelo”.
-            </Text>
 
             <TouchableOpacity
               style={styles.emptyButton}
@@ -149,58 +141,53 @@ export default function DeviceModelAdminScreen({
         )}
 
         {!loading && models.length > 0 && (
-          <View style={styles.listHeader}>
-            <Text style={styles.listTitle}>Listado de modelos</Text>
-            <Text style={styles.listCounter}>{models.length}</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Inventario técnico</Text>
           </View>
         )}
 
         {models.map(model => (
           <View key={model._id} style={styles.modelCard}>
-            <View style={styles.modelHeader}>
-              <View style={styles.iconWrap}>
-                <Shapes color={COLORS.primary} size={21} strokeWidth={2.35} />
+            <View style={styles.modelTop}>
+              <View style={styles.modelIcon}>
+                <Shapes color={COLORS.primary} size={20} strokeWidth={2.35} />
               </View>
 
-              <View style={styles.modelCopy}>
+              <View style={styles.modelContent}>
                 <Text style={styles.modelName} numberOfLines={2}>
                   {model.brand} · {model.name}
                 </Text>
 
-                <View style={styles.metaRow}>
-                  <View style={styles.metaChip}>
-                    <Text style={styles.metaChipLabel}>UID</Text>
-                    <Text style={styles.metaChipText}>
-                      {model.defaultUnitId ?? "-"}
-                    </Text>
-                  </View>
-
-                  <View style={styles.metaChip}>
-                    <Text style={styles.metaChipLabel}>Baud</Text>
-                    <Text style={styles.metaChipText}>
-                      {model.defaultBaudRate ?? "-"}
-                    </Text>
-                  </View>
-
-                  <View style={styles.metaChip}>
-                    <Text style={styles.metaChipLabel}>Reg.</Text>
-                    <Text style={styles.metaChipText}>
-                      {model.registerTemplates?.length ?? 0}
-                    </Text>
-                  </View>
-                </View>
-
                 {!!model.description && (
-                  <Text style={styles.modelDescription} numberOfLines={3}>
+                  <Text style={styles.modelDescription} numberOfLines={2}>
                     {model.description}
                   </Text>
                 )}
               </View>
             </View>
 
+            <View style={styles.metricsRow}>
+              <View style={styles.metricBox}>
+                <Text style={styles.metricLabel}>UID</Text>
+                <Text style={styles.metricValue}>{model.defaultUnitId ?? "-"}</Text>
+              </View>
+
+              <View style={styles.metricBox}>
+                <Text style={styles.metricLabel}>Baud</Text>
+                <Text style={styles.metricValue}>{model.defaultBaudRate ?? "-"}</Text>
+              </View>
+
+              <View style={styles.metricBox}>
+                <Text style={styles.metricLabel}>Registros</Text>
+                <Text style={styles.metricValue}>
+                  {model.registerTemplates?.length ?? 0}
+                </Text>
+              </View>
+            </View>
+
             <View style={styles.actionsRow}>
               <TouchableOpacity
-                style={styles.secondaryButton}
+                style={styles.registerButton}
                 activeOpacity={0.9}
                 onPress={() =>
                   navigation.navigate("DeviceModelForm", {
@@ -210,9 +197,7 @@ export default function DeviceModelAdminScreen({
                 }
               >
                 <Plus color={COLORS.primary} size={17} strokeWidth={2.5} />
-                <Text style={styles.secondaryButtonText}>
-                  Cargar nuevo registro
-                </Text>
+                <Text style={styles.registerButtonText}>Nuevo registro</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -238,111 +223,122 @@ export default function DeviceModelAdminScreen({
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 18,
-    paddingTop: 70,
+    paddingTop: 72,
     paddingBottom: 38,
     backgroundColor: COLORS.bg,
   },
 
-  hero: {
-    backgroundColor: COLORS.dark,
-    borderRadius: 30,
-    padding: 22,
-    marginBottom: 18,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    shadowColor: "#0F172A",
-    shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.18,
-    shadowRadius: 28,
-    elevation: 8,
-  },
-
-  heroTopRow: {
+  header: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     marginBottom: 18,
   },
 
-  heroIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  heroBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "rgba(147,197,253,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(147,197,253,0.22)",
-  },
-
-  heroBadgeText: {
-    color: "#BFDBFE",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  eyebrow: {
-    color: "#93C5FD",
+  kicker: {
+    color: COLORS.primary,
     fontSize: 11,
     fontWeight: "900",
-    letterSpacing: 1.25,
+    letterSpacing: 1.3,
     textTransform: "uppercase",
+    marginBottom: 6,
   },
 
   title: {
-    color: COLORS.white,
-    fontSize: 29,
-    lineHeight: 35,
+    color: COLORS.text,
+    fontSize: 28,
+    lineHeight: 34,
     fontWeight: "900",
-    marginTop: 8,
-    letterSpacing: -0.8,
+    letterSpacing: -0.9,
+    maxWidth: 230,
   },
 
-  subtitle: {
-    color: "#CBD5E1",
-    fontSize: 14,
-    lineHeight: 21,
-    fontWeight: "500",
-    marginTop: 9,
+  countBox: {
+    minWidth: 72,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: "center",
+    shadowColor: "#94A3B8",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    elevation: 3,
   },
 
-  primaryAction: {
-    marginTop: 18,
-    alignSelf: "stretch",
+  countNumber: {
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: "900",
+    lineHeight: 25,
+  },
+
+  countLabel: {
+    color: COLORS.muted,
+    fontSize: 11,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+
+  createCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 24,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 9,
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 15,
+    gap: 13,
+    shadowColor: "#94A3B8",
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.1,
+    shadowRadius: 24,
+    elevation: 4,
+  },
+
+  createIcon: {
+    width: 52,
+    height: 52,
     borderRadius: 18,
+    backgroundColor: COLORS.primarySoft,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.18)",
-    shadowColor: "#000B3D",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.24,
-    shadowRadius: 18,
-    elevation: 5,
+    borderColor: COLORS.primaryBorder,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
-  primaryActionText: {
-    color: COLORS.white,
+  createCopy: {
+    flex: 1,
+  },
+
+  createTitle: {
+    color: COLORS.text,
+    fontSize: 16,
     fontWeight: "900",
-    fontSize: 15,
-    letterSpacing: 0.1,
+    letterSpacing: -0.2,
   },
 
-  loadingCard: {
+  createMeta: {
+    color: COLORS.muted,
+    fontSize: 12,
+    fontWeight: "600",
+    marginTop: 3,
+  },
+
+  createPlus: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  stateCard: {
     backgroundColor: COLORS.surface,
     borderRadius: 22,
     padding: 18,
@@ -355,7 +351,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
-  loadingText: {
+  stateText: {
     color: COLORS.muted,
     fontSize: 14,
     fontWeight: "700",
@@ -387,10 +383,10 @@ const styles = StyleSheet.create({
   emptyCard: {
     backgroundColor: COLORS.surface,
     borderRadius: 26,
-    padding: 22,
+    padding: 24,
     borderWidth: 1,
     borderColor: COLORS.border,
-    alignItems: "flex-start",
+    alignItems: "center",
     shadowColor: "#94A3B8",
     shadowOffset: { width: 0, height: 14 },
     shadowOpacity: 0.08,
@@ -398,11 +394,11 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
 
-  emptyIconWrap: {
-    width: 54,
-    height: 54,
-    borderRadius: 20,
-    backgroundColor: COLORS.primaryLight,
+  emptyIcon: {
+    width: 58,
+    height: 58,
+    borderRadius: 21,
+    backgroundColor: COLORS.primarySoft,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 16,
@@ -410,18 +406,10 @@ const styles = StyleSheet.create({
 
   emptyTitle: {
     color: COLORS.text,
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: "900",
-    marginBottom: 8,
-    letterSpacing: -0.3,
-  },
-
-  emptyText: {
-    color: COLORS.muted,
-    fontSize: 14,
-    lineHeight: 21,
-    fontWeight: "500",
     marginBottom: 16,
+    letterSpacing: -0.3,
   },
 
   emptyButton: {
@@ -431,7 +419,7 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: COLORS.primary,
     borderRadius: 16,
-    paddingHorizontal: 16,
+    paddingHorizontal: 17,
     paddingVertical: 13,
   },
 
@@ -441,143 +429,121 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
 
-  listHeader: {
-    marginTop: 2,
+  sectionHeader: {
     marginBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
   },
 
-  listTitle: {
+  sectionTitle: {
     color: COLORS.text,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "900",
     letterSpacing: -0.3,
   },
 
-  listCounter: {
-    minWidth: 32,
-    height: 32,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    overflow: "hidden",
-    backgroundColor: COLORS.primaryLight,
-    color: COLORS.primaryText,
-    textAlign: "center",
-    textAlignVertical: "center",
-    fontSize: 13,
-    lineHeight: 32,
-    fontWeight: "900",
-  },
-
   modelCard: {
     backgroundColor: COLORS.surface,
-    borderRadius: 26,
-    padding: 17,
+    borderRadius: 24,
+    padding: 16,
     marginBottom: 14,
     borderWidth: 1,
     borderColor: COLORS.border,
     shadowColor: "#94A3B8",
-    shadowOffset: { width: 0, height: 14 },
+    shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.08,
-    shadowRadius: 24,
-    elevation: 4,
+    shadowRadius: 22,
+    elevation: 3,
   },
 
-  modelHeader: {
+  modelTop: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 13,
   },
 
-  iconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 18,
-    backgroundColor: COLORS.primaryLight,
+  modelIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 17,
+    backgroundColor: COLORS.primarySoft,
     borderWidth: 1,
-    borderColor: "#BFDBFE",
+    borderColor: COLORS.primaryBorder,
     alignItems: "center",
     justifyContent: "center",
   },
 
-  modelCopy: {
+  modelContent: {
     flex: 1,
   },
 
   modelName: {
-    color: COLORS.dark,
+    color: COLORS.text,
     fontSize: 17,
     lineHeight: 22,
     fontWeight: "900",
     letterSpacing: -0.3,
   },
 
-  metaRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 10,
-  },
-
-  metaChip: {
-    minWidth: 72,
-    backgroundColor: COLORS.surfaceSoft,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-
-  metaChipLabel: {
-    color: "#94A3B8",
-    fontSize: 10,
-    fontWeight: "900",
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
-    marginBottom: 2,
-  },
-
-  metaChipText: {
-    color: COLORS.dark,
-    fontSize: 13,
-    fontWeight: "900",
-  },
-
   modelDescription: {
     color: COLORS.muted,
-    marginTop: 10,
-    lineHeight: 19,
+    marginTop: 6,
+    lineHeight: 18,
     fontSize: 13,
     fontWeight: "500",
   },
 
+  metricsRow: {
+    flexDirection: "row",
+    gap: 9,
+    marginTop: 16,
+  },
+
+  metricBox: {
+    flex: 1,
+    backgroundColor: COLORS.surfaceSoft,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+
+  metricLabel: {
+    color: COLORS.mutedSoft,
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginBottom: 3,
+  },
+
+  metricValue: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
   actionsRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
     gap: 10,
     marginTop: 16,
   },
 
-  secondaryButton: {
-    flexGrow: 1,
-    flexBasis: "52%",
-    minHeight: 50,
-    backgroundColor: COLORS.primaryLight,
+  registerButton: {
+    flex: 1.3,
+    minHeight: 48,
+    backgroundColor: COLORS.primarySoft,
     borderRadius: 16,
-    paddingVertical: 13,
+    paddingVertical: 12,
     paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
     gap: 8,
     borderWidth: 1,
-    borderColor: "#BFDBFE",
+    borderColor: COLORS.primaryBorder,
   },
 
-  secondaryButtonText: {
+  registerButtonText: {
     color: COLORS.primary,
     fontWeight: "900",
     textAlign: "center",
@@ -585,12 +551,11 @@ const styles = StyleSheet.create({
   },
 
   editButton: {
-    flexGrow: 1,
-    flexBasis: "34%",
-    minHeight: 50,
+    flex: 0.8,
+    minHeight: 48,
     backgroundColor: COLORS.primary,
     borderRadius: 16,
-    paddingVertical: 13,
+    paddingVertical: 12,
     paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",

@@ -9,6 +9,8 @@ import {
   Pressable,
   SafeAreaView,
   StatusBar,
+  Alert,
+  Linking,
 } from 'react-native';
 import {
   ArrowLeft,
@@ -19,8 +21,11 @@ import {
   Info,
   Smartphone,
   ExternalLink,
+  FileDown,
 } from 'lucide-react-native';
 import ImageViewing from 'react-native-image-viewing';
+
+import { getApiBaseUrl } from '../services/api';
 
 type NavigationProp = {
   goBack: () => void;
@@ -51,6 +56,15 @@ function ManualScreen({ navigation }: { navigation: NavigationProp }) {
     const resolved = Image.resolveAssetSource(img);
     setViewerImage(resolved?.uri ?? null);
     setViewerVisible(true);
+  };
+
+  const handleDownloadPdf = async () => {
+    try {
+      const baseUrl = await getApiBaseUrl();
+      await Linking.openURL(`${baseUrl}/docs/Tecnitower_Manual_de_Uso.pdf`);
+    } catch {
+      Alert.alert('Manual técnico', 'No se pudo abrir el PDF del manual.');
+    }
   };
 
   const preSteps = useMemo(
@@ -309,7 +323,12 @@ Nota: Realice este cambio solo si los datos Modbus de su controlador son incompa
           </StepCard>
         ))}
 
-        <View style={{ height: 36 }} />
+        <TouchableOpacity style={styles.downloadButton} onPress={handleDownloadPdf}>
+          <FileDown size={20} color="#ffffff" />
+          <Text style={styles.downloadButtonText}>Descargar PDF de manual</Text>
+        </TouchableOpacity>
+
+        <View style={styles.bottomSpacer} />
       </ScrollView>
 
       <ImageViewing
@@ -709,6 +728,26 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15,23,42,0.6)',
     padding: 8,
     borderRadius: 10,
+  },
+  downloadButton: {
+    minHeight: 54,
+    borderRadius: 16,
+    backgroundColor: '#001F7C',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 2,
+    marginBottom: 8,
+    paddingHorizontal: 16,
+  },
+  downloadButtonText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  bottomSpacer: {
+    height: 36,
   },
 });
 

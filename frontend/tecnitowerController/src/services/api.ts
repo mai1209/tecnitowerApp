@@ -25,6 +25,15 @@ export type PasswordRecoveryPayload = {
   email: string;
 };
 
+export type PasswordRecoveryVerifyPayload = {
+  email: string;
+  code: string;
+};
+
+export type PasswordRecoveryResetPayload = PasswordRecoveryVerifyPayload & {
+  newPassword: string;
+};
+
 export type ChangePasswordPayload = {
   currentPassword: string;
   newPassword: string;
@@ -104,7 +113,7 @@ export type SetpointScanResponse = {
 
 
 
-const LOCAL_API_URL = "http://192.168.100.56:3001";
+const LOCAL_API_URL = "http://192.168.100.63:3001";
 const CLOUD_API_URL = "http://147.15.48.169:3001";
 
 export const DEFAULT_API_BASE_URL = __DEV__
@@ -223,6 +232,20 @@ export function loginUser(payload: LoginPayload) {
 
 export function requestPasswordRecovery(payload: PasswordRecoveryPayload) {
   return request<{ message: string }>("/api/auth/forgot-password", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function verifyPasswordRecoveryCode(payload: PasswordRecoveryVerifyPayload) {
+  return request<{ message: string }>("/api/auth/forgot-password/verify", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function resetPasswordWithRecoveryCode(payload: PasswordRecoveryResetPayload) {
+  return request<{ message: string }>("/api/auth/forgot-password/reset", {
     method: "POST",
     body: payload,
   });

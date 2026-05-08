@@ -30,8 +30,26 @@ const passwordRecoveryRequestSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "resolved", "dismissed"],
+      enum: ["pending", "verified", "resolved", "dismissed"],
       default: "pending",
+    },
+    codeHash: {
+      type: String,
+      default: "",
+      select: false,
+    },
+    codeExpiresAt: {
+      type: Date,
+      default: null,
+    },
+    codeAttempts: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    verifiedAt: {
+      type: Date,
+      default: null,
     },
     resolvedAt: {
       type: Date,

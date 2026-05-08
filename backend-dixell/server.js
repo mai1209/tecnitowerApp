@@ -28,8 +28,10 @@ app.use(express.json());
 const PORT = Number(process.env.PORT ?? 3001);
 const HOST = process.env.HOST ?? "0.0.0.0";
 const ADMIN_WEB_DIR = fileURLToPath(new URL("./public/admin/", import.meta.url));
+const DOCS_DIR = fileURLToPath(new URL("./docs/", import.meta.url));
 
 app.use("/admin", express.static(ADMIN_WEB_DIR));
+app.use("/docs", express.static(DOCS_DIR));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);

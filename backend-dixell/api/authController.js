@@ -5,6 +5,10 @@ import { PasswordRecoveryRequestModel } from "../models/PasswordRecoveryRequest.
 import { hashPassword, verifyPassword } from "../token/passwordManager.js";
 import { signAccessToken } from "../token/jwtManager.js";
 import { buildPublicUser, normalizeUserRole } from "../utils/userAccess.js";
+import { sendPasswordRecoveryCode } from "../services/passwordRecoveryEmailService.js";
+
+const RECOVERY_CODE_TTL_MINUTES = Number(process.env.PASSWORD_RECOVERY_CODE_TTL_MINUTES ?? 15);
+const RECOVERY_MAX_ATTEMPTS = Number(process.env.PASSWORD_RECOVERY_MAX_ATTEMPTS ?? 5);
 
 function sanitizeEmail(email) {
   return String(email ?? "").trim().toLowerCase();
@@ -20,6 +24,14 @@ function canManageRecovery(role) {
 
 function sanitizePushToken(token) {
   return String(token ?? "").trim();
+}
+
+function generateRecoveryCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function sanitizeRecoveryCode(code) {
+  return String(code ?? "").replace(/\D/g, "").slice(0, 6);
 }
 
 function sanitizePlatform(platform) {
@@ -124,22 +136,130 @@ export async function requestPasswordRecovery(req, res, next) {
     }
 
     const userDoc = await UserModel.findOne({ email, isActive: true }).select("_id email");
+    const code = generateRecoveryCode();
+    const codeExpiresAt = new Date(Date.now() + RECOVERY_CODE_TTL_MINUTES * 60 * 1000);
 
     await PasswordRecoveryRequestModel.create({
       email,
       userId: userDoc?._id ?? null,
       requestIp: String(req.ip ?? ""),
       userAgent: String(req.get("user-agent") ?? ""),
+      codeHash: userDoc?._id ? await hashPassword(code) : "",
+      codeExpiresAt: userDoc?._id ? codeExpiresAt : null,
     });
 
     if (userDoc?._id) {
-      console.info(`[AUTH] Solicitud de recuperación registrada para ${email}`);
+      await sendPasswordRecoveryCode({
+        email,
+        code,
+        expiresInMinutes: RECOVERY_CODE_TTL_MINUTES,
+      });
+      console.info(`[AUTH] Código de recuperación generado para ${email}`);
     }
 
     return res.json({
       message:
-        "Si existe una cuenta con ese correo, registramos el pedido de recuperación. Soporte te ayudará a restablecer la contraseña.",
+        "Si existe una cuenta con ese correo, enviamos un código de verificación para restablecer la contraseña.",
     });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function findLatestRecoveryRequest(email) {
+  return PasswordRecoveryRequestModel.findOne({
+    email,
+    status: { $in: ["pending", "verified"] },
+    codeExpiresAt: { $gt: new Date() },
+  })
+    .sort({ createdAt: -1 })
+    .select("+codeHash");
+}
+
+export async function verifyPasswordRecoveryCode(req, res, next) {
+  try {
+    const email = sanitizeEmail(req.body?.email);
+    const code = sanitizeRecoveryCode(req.body?.code);
+
+    if (!email || !code) {
+      return res.status(400).json({ error: "email y code son obligatorios" });
+    }
+
+    if (!isValidEmail(email) || code.length !== 6) {
+      return res.status(400).json({ error: "El email o el código no son válidos" });
+    }
+
+    const requestDoc = await findLatestRecoveryRequest(email);
+    if (!requestDoc || !requestDoc.codeHash || requestDoc.codeAttempts >= RECOVERY_MAX_ATTEMPTS) {
+      return res.status(400).json({ error: "El código no es válido o está vencido" });
+    }
+
+    const validCode = await verifyPassword(code, requestDoc.codeHash);
+    if (!validCode) {
+      requestDoc.codeAttempts += 1;
+      await requestDoc.save();
+      return res.status(400).json({ error: "El código no es válido o está vencido" });
+    }
+
+    requestDoc.status = "verified";
+    requestDoc.verifiedAt = new Date();
+    await requestDoc.save();
+
+    return res.json({ message: "Código verificado correctamente" });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function resetPasswordWithRecoveryCode(req, res, next) {
+  try {
+    const email = sanitizeEmail(req.body?.email);
+    const code = sanitizeRecoveryCode(req.body?.code);
+    const newPassword = String(req.body?.newPassword ?? "");
+
+    if (!email || !code || !newPassword) {
+      return res.status(400).json({ error: "email, code y newPassword son obligatorios" });
+    }
+
+    if (!isValidEmail(email) || code.length !== 6) {
+      return res.status(400).json({ error: "El email o el código no son válidos" });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: "La nueva contraseña debe tener al menos 8 caracteres" });
+    }
+
+    const requestDoc = await findLatestRecoveryRequest(email);
+    if (!requestDoc || !requestDoc.codeHash || requestDoc.codeAttempts >= RECOVERY_MAX_ATTEMPTS) {
+      return res.status(400).json({ error: "El código no es válido o está vencido" });
+    }
+
+    const validCode = await verifyPassword(code, requestDoc.codeHash);
+    if (!validCode) {
+      requestDoc.codeAttempts += 1;
+      await requestDoc.save();
+      return res.status(400).json({ error: "El código no es válido o está vencido" });
+    }
+
+    const userDoc = await UserModel.findOne({ email, isActive: true }).select("+passwordHash");
+    if (!userDoc) {
+      return res.status(400).json({ error: "El código no es válido o está vencido" });
+    }
+
+    userDoc.passwordHash = await hashPassword(newPassword);
+    await userDoc.save();
+
+    requestDoc.status = "resolved";
+    requestDoc.verifiedAt = requestDoc.verifiedAt ?? new Date();
+    requestDoc.resolvedAt = new Date();
+    await requestDoc.save();
+
+    await PasswordRecoveryRequestModel.updateMany(
+      { email, status: "pending", _id: { $ne: requestDoc._id } },
+      { $set: { status: "dismissed" } }
+    );
+
+    return res.json({ message: "Contraseña restablecida correctamente" });
   } catch (err) {
     return next(err);
   }
