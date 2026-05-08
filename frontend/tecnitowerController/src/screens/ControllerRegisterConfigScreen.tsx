@@ -109,7 +109,7 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
   const [alertsEnabled, setAlertsEnabled] = useState(true);
   const [minTemperature, setMinTemperature] = useState("");
   const [maxTemperature, setMaxTemperature] = useState("");
-  const [offlineAfterSeconds, setOfflineAfterSeconds] = useState("60");
+  const [offlineAfterMinutes, setOfflineAfterMinutes] = useState("1");
   const [controllerName, setControllerName] = useState(controller?.name ?? "");
   const [controllerElfinId, setControllerElfinId] = useState(controller?.elfinId ?? "");
   const [gatewayMode, setGatewayMode] = useState(controller?.gatewayMode ?? "tcp-client");
@@ -160,13 +160,13 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
             ? ""
             : String(currentController.alertConfig.maxTemperature)
         );
-        setOfflineAfterSeconds(
+        setOfflineAfterMinutes(
           currentController?.alertConfig?.offlineAfterMs == null
-            ? "60"
+            ? "1"
             : String(
                 Math.max(
                   1,
-                  Math.round(Number(currentController.alertConfig.offlineAfterMs) / 1000)
+                  Math.round(Number(currentController.alertConfig.offlineAfterMs) / 60000)
                 )
               )
         );
@@ -272,7 +272,7 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
   const handleSave = async () => {
     const parsedMinTemperature = parseOptionalNumber(minTemperature);
     const parsedMaxTemperature = parseOptionalNumber(maxTemperature);
-    const parsedOfflineAfterSeconds = parseOptionalNumber(offlineAfterSeconds);
+    const parsedOfflineAfterMinutes = parseOptionalNumber(offlineAfterMinutes);
 
     if (minTemperature.trim() && parsedMinTemperature == null) {
       Alert.alert("Error", "La temperatura mínima de alerta es inválida");
@@ -294,10 +294,10 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
     }
 
     if (
-      parsedOfflineAfterSeconds != null &&
-      (!Number.isFinite(parsedOfflineAfterSeconds) || parsedOfflineAfterSeconds < 1)
+      parsedOfflineAfterMinutes != null &&
+      (!Number.isFinite(parsedOfflineAfterMinutes) || parsedOfflineAfterMinutes < 1)
     ) {
-      Alert.alert("Error", "El tiempo sin comunicación debe ser al menos 1 segundo");
+      Alert.alert("Error", "El tiempo sin comunicación debe ser al menos 1 minuto");
       return;
     }
 
@@ -354,7 +354,7 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
               minTemperature: parsedMinTemperature,
               maxTemperature: parsedMaxTemperature,
               offlineAfterMs:
-                parsedOfflineAfterSeconds == null ? null : parsedOfflineAfterSeconds * 1000,
+                parsedOfflineAfterMinutes == null ? null : parsedOfflineAfterMinutes * 60000,
             },
             session.token
           )
@@ -718,13 +718,13 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
         </FieldBlock>
 
         <FieldBlock
-          label="Segundos sin comunicación"
-          help="Tiempo de tolerancia antes de marcarlo offline. Si el equipo vuelve a reportar dentro de ese plazo, no dispara alerta."
+          label="Minutos sin comunicación"
+          help="Tiempo de tolerancia en minutos antes de marcarlo offline. Si el equipo vuelve a reportar dentro de ese plazo, no dispara alerta."
         >
           <TextInput
             style={styles.input}
-            value={offlineAfterSeconds}
-            onChangeText={setOfflineAfterSeconds}
+            value={offlineAfterMinutes}
+            onChangeText={setOfflineAfterMinutes}
             keyboardType="number-pad"
             placeholderTextColor="#94A3B8"
           />

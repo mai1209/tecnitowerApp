@@ -54,7 +54,7 @@ function ControllerFormScreen({ navigation, route, session }: Props) {
   const [deviceModel, setDeviceModel] = useState('');
   const [deviceBrand, setDeviceBrand] = useState('');
   const [elfinId, setElfinId] = useState('');
-  const [ipAddress, setIpAddress] = useState('');
+  const [ipAddress] = useState('');
   const [unitId, setUnitId] = useState('1');
   const [baudRate, setBaudRate] = useState('9600');
   const [probe1, setProbe1] = useState('');
@@ -62,7 +62,7 @@ function ControllerFormScreen({ navigation, route, session }: Props) {
   const [alertsEnabled, setAlertsEnabled] = useState(true);
   const [minTemperature, setMinTemperature] = useState('');
   const [maxTemperature, setMaxTemperature] = useState('');
-  const [offlineAfterSeconds, setOfflineAfterSeconds] = useState('60');
+  const [offlineAfterMinutes, setOfflineAfterMinutes] = useState('1');
   const [models, setModels] = useState<any[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -121,7 +121,7 @@ function ControllerFormScreen({ navigation, route, session }: Props) {
     const parsedProbe2 = parseOptionalNumber(probe2);
     const parsedMinTemperature = parseOptionalNumber(minTemperature);
     const parsedMaxTemperature = parseOptionalNumber(maxTemperature);
-    const parsedOfflineAfterSeconds = parseOptionalNumber(offlineAfterSeconds);
+    const parsedOfflineAfterMinutes = parseOptionalNumber(offlineAfterMinutes);
     if (!parsedUnitId || parsedUnitId < 1 || parsedUnitId > 247) {
       setError('Unit ID debe estar entre 1 y 247.');
       return;
@@ -155,10 +155,10 @@ function ControllerFormScreen({ navigation, route, session }: Props) {
       return;
     }
     if (
-      offlineAfterSeconds.trim() &&
-      (parsedOfflineAfterSeconds == null || parsedOfflineAfterSeconds < 1)
+      offlineAfterMinutes.trim() &&
+      (parsedOfflineAfterMinutes == null || parsedOfflineAfterMinutes < 1)
     ) {
-      setError('El tiempo sin comunicación debe ser al menos 1 segundo.');
+      setError('El tiempo sin comunicación debe ser al menos 1 minuto.');
       return;
     }
     setIsSubmitting(true);
@@ -184,7 +184,7 @@ function ControllerFormScreen({ navigation, route, session }: Props) {
           minTemperature: parsedMinTemperature,
           maxTemperature: parsedMaxTemperature,
           offlineAfterMs:
-            parsedOfflineAfterSeconds == null ? undefined : parsedOfflineAfterSeconds * 1000,
+            parsedOfflineAfterMinutes == null ? undefined : parsedOfflineAfterMinutes * 60000,
         },
       };
 
@@ -360,11 +360,11 @@ function ControllerFormScreen({ navigation, route, session }: Props) {
               />
 
               <InputField
-                label="Segundos sin comunicación"
+                label="Minutos sin comunicación"
                 icon={<Hash size={16} color="#64748B" />}
-                value={offlineAfterSeconds}
-                onChangeText={setOfflineAfterSeconds}
-                placeholder="60"
+                value={offlineAfterMinutes}
+                onChangeText={setOfflineAfterMinutes}
+                placeholder="1"
                 keyboardType="number-pad"
               />
 

@@ -14,6 +14,9 @@ const READY_DELAY_MS = Number(process.env.TCP_GATEWAY_READY_DELAY_MS ?? 400);
 // en routers domésticos/industriales que cierran sesiones idle.
 const KEEP_ALIVE_INTERVAL_MS = Number(process.env.TCP_GATEWAY_KEEP_ALIVE_MS ?? 10000);
 const DESTROY_AFTER_TIMEOUTS = Number(process.env.TCP_GATEWAY_DESTROY_AFTER_TIMEOUTS ?? 2);
+const REGISTRATION_TIMEOUT_MS = Number(process.env.TCP_GATEWAY_REGISTRATION_TIMEOUT_MS ?? 5000);
+const MAX_IDENTITY_BUFFER_BYTES = Number(process.env.TCP_GATEWAY_MAX_IDENTITY_BUFFER_BYTES ?? 256);
+const ALLOW_BARE_ELFIN_ID = String(process.env.TCP_GATEWAY_ALLOW_BARE_ID ?? "").trim() === "1";
 
 let tcpServer = null;
 const connections = new Map();
@@ -35,6 +38,14 @@ function looksLikeElfinId(value = "") {
   }
   const normalized = canonicalizeElfinId(value);
   return normalized.length >= 8 && /\d/.test(normalized);
+}
+
+function hasExplicitElfinPrefix(value = "") {
+  return /^\s*(ELFIN|ID|MAC)\s*[:=]\s*[A-Za-z0-9._-]{8,}/i.test(String(value ?? ""));
+}
+
+function canRegisterIdentity(value = "") {
+  return hasExplicitElfinPrefix(value) || (ALLOW_BARE_ELFIN_ID && looksLikeElfinId(value));
 }
 
 function toHexPreview(buffer, maxBytes = 32) {
@@ -72,6 +83,10 @@ function attachConnection(elfinId, state) {
   state.ready = false; // canal RS485 aún no estable
 
   connections.set(normalizedElfinId, state);
+  if (state.registrationTimeout) {
+    clearTimeout(state.registrationTimeout);
+    state.registrationTimeout = null;
+  }
   console.log(`${logPrefix(state)} conexión registrada`);
 
   // Marcar como listo después del delay para evitar la carrera inicial
@@ -109,7 +124,7 @@ function tryRegisterElfin(state, chunk) {
   state.identityBuffer = parts.pop() ?? "";
 
   for (const rawPart of parts) {
-    if (!looksLikeElfinId(rawPart)) continue;
+    if (!canRegisterIdentity(rawPart) || !looksLikeElfinId(rawPart)) continue;
     const normalized = canonicalizeElfinId(rawPart);
     attachConnection(normalized, state);
     return { registered: true, remainder: Buffer.alloc(0) };
@@ -117,9 +132,8 @@ function tryRegisterElfin(state, chunk) {
 
   const immediateCandidate = state.identityBuffer.trim();
   const printableAscii = /^[\x20-\x7E]+$/.test(immediateCandidate);
-  const normalizedImmediate = canonicalizeElfinId(immediateCandidate);
-  if (printableAscii && looksLikeElfinId(normalizedImmediate)) {
-    attachConnection(normalizedImmediate, state);
+  if (printableAscii && canRegisterIdentity(immediateCandidate) && looksLikeElfinId(immediateCandidate)) {
+    attachConnection(canonicalizeElfinId(immediateCandidate), state);
     state.identityBuffer = "";
     return { registered: true, remainder: Buffer.alloc(0) };
   }
@@ -137,6 +151,13 @@ function tryRegisterElfin(state, chunk) {
       registered: true,
       remainder: trailingText ? Buffer.from(trailingText, "utf8") : Buffer.alloc(0),
     };
+  }
+
+  if (
+    Buffer.byteLength(state.identityBuffer, "utf8") > MAX_IDENTITY_BUFFER_BYTES ||
+    /^(GET|POST|HEAD|PUT|DELETE|OPTIONS|TRACE|CONNECT)\s/i.test(state.identityBuffer)
+  ) {
+    destroyConnection(state, "registro TCP inválido");
   }
 
   return { registered: false, remainder: Buffer.alloc(0) };
@@ -186,6 +207,10 @@ function handleSocketData(state, chunk) {
 }
 
 function handleSocketClose(state, reason = "closed") {
+  if (state.registrationTimeout) {
+    clearTimeout(state.registrationTimeout);
+    state.registrationTimeout = null;
+  }
   detachConnection(state);
   if (state.pending) {
     clearTimeout(state.pending.timeout);
@@ -205,7 +230,14 @@ function createConnectionState(socket) {
     identityBuffer: "",
     buffer: Buffer.alloc(0),
     pending: null,
+    registrationTimeout: null,
   };
+
+  state.registrationTimeout = setTimeout(() => {
+    if (!state.elfinId) {
+      destroyConnection(state, "sin registro Elfin válido");
+    }
+  }, REGISTRATION_TIMEOUT_MS);
 
   socket.on("data", (chunk) => handleSocketData(state, chunk));
   socket.on("close", () => handleSocketClose(state, "cerrada"));
