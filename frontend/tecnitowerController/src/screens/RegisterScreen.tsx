@@ -114,16 +114,12 @@ function RegisterScreen({ navigation }: Props) {
 
                   <Text style={styles.brand}>TECNITOWER S.A</Text>
                   <Text style={styles.welcomeTitle}>Crear cuenta</Text>
-                  <Text style={styles.welcomeSubtitle}>
-                    Registrá tu usuario para comenzar a operar y monitorear tus equipos.
-                  </Text>
+                 
                 </View>
 
                 <View style={styles.card}>
                   <Text style={styles.cardTitle}>Registro</Text>
-                  <Text style={styles.cardSubtitle}>
-                    Completá los datos para dar de alta tu cuenta.
-                  </Text>
+               
 
                   <View style={styles.formGroup}>
                     <Text style={styles.label}>Correo electrónico</Text>
@@ -289,13 +285,7 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     marginBottom: 8,
   },
-  welcomeSubtitle: {
-    fontSize: 14,
-    lineHeight: 22,
-    color: '#475569',
-    textAlign: 'center',
-    maxWidth: 320,
-  },
+  
   card: {
     backgroundColor: 'rgba(255,255,255,0.92)',
     borderRadius: 28,
@@ -314,12 +304,7 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     marginBottom: 6,
   },
-  cardSubtitle: {
-    fontSize: 14,
-    color: '#64748B',
-    lineHeight: 21,
-    marginBottom: 22,
-  },
+
   formGroup: {
     marginBottom: 14,
   },

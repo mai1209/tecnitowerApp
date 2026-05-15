@@ -122,16 +122,12 @@ function LoginScreen({ onLogin, navigation }: Props) {
                   </TouchableOpacity>
 
                   <Text style={styles.welcomeTitle}>Bienvenido</Text>
-                  <Text style={styles.welcomeSubtitle}>
-                    Accedé a tu panel técnico y gestioná tus equipos de forma simple.
-                  </Text>
+              
                 </View>
 
                 <View style={styles.card}>
                   <Text style={styles.cardTitle}>Iniciar sesión</Text>
-                  <Text style={styles.cardSubtitle}>
-                    Ingresá tus credenciales para continuar.
-                  </Text>
+               
 
                   <View style={styles.formGroup}>
                     <Text style={styles.label}>Correo electrónico</Text>
@@ -271,13 +267,7 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     marginBottom: 8,
   },
-  welcomeSubtitle: {
-    fontSize: 14,
-    lineHeight: 22,
-    color: '#475569',
-    textAlign: 'center',
-    maxWidth: 320,
-  },
+
   card: {
     backgroundColor: 'rgba(255,255,255,0.92)',
     borderRadius: 28,
@@ -296,12 +286,7 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     marginBottom: 6,
   },
-  cardSubtitle: {
-    fontSize: 14,
-    color: '#64748B',
-    lineHeight: 21,
-    marginBottom: 22,
-  },
+ 
   formGroup: {
     marginBottom: 14,
   },
