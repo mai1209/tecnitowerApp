@@ -25,9 +25,9 @@ function getControllerRuntimeStatus(controller: any) {
   const alert = controller?.alertState ?? null;
 
   if (alert?.active) {
-    if (alert.type === 'offline') {
+    if (alert.type === 'offline' || alert.type === 'elfin_offline' || alert.type === 'modbus_offline') {
       return {
-        label: 'Sin conexión',
+        label: alert.type === 'elfin_offline' ? 'Elfin offline' : alert.type === 'modbus_offline' ? 'Lectura offline' : 'Sin conexión',
         detail: alert.message || 'El equipo no reporta comunicación reciente.',
         backgroundColor: '#FEE2E2',
         textColor: '#991B1B',

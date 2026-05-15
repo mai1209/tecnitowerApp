@@ -224,10 +224,17 @@ export const AppNavigator = () => {
                 );
               }}
             </Stack.Screen>
-            <Stack.Screen
-              name="PasswordRecovery"
-              getComponent={() => require('../screens/PasswordRecoveryScreen').default}
-            />
+            <Stack.Screen name="PasswordRecovery">
+              {props => {
+                const PasswordRecoveryScreen = require('../screens/PasswordRecoveryScreen').default;
+                return (
+                  <PasswordRecoveryScreen
+                    {...props}
+                    onLogout={handleLogout}
+                  />
+                );
+              }}
+            </Stack.Screen>
 
             <Stack.Screen name="ControllerLive">
               {props => (

@@ -732,6 +732,7 @@ export const diagnosticController = async (req, res) => {
         let modbusOnline = false;
         let mqttRegistersRaw = null;
         let tcpClientRegistersRaw = null;
+        let diagnosticError = null;
         const visibleDefinitions = getControllerVisibleDefinitions(controller);
 
         if (shouldUseAgentMqttControl(controller)) {
@@ -765,6 +766,7 @@ export const diagnosticController = async (req, res) => {
             });
           } catch (err) {
             console.error("❌ [DIAGNOSTIC MQTT AGENT ERROR]:", err?.message || err);
+            diagnosticError = err;
           }
         } else if (shouldUseTcpClientControl(controller) && !recentTelemetry) {
           try {
@@ -796,6 +798,7 @@ export const diagnosticController = async (req, res) => {
             });
           } catch (err) {
             console.error("❌ [DIAGNOSTIC TCP CLIENT ERROR]:", err?.message || err);
+            diagnosticError = err;
           }
         } else if (shouldUseTcpClientControl(controller) && recentTelemetry) {
           modbusOnline = true;
@@ -818,6 +821,7 @@ export const diagnosticController = async (req, res) => {
             modbusOnline = true;
           } catch (err) {
             console.error("❌ [DIAGNOSTIC MODBUS ERROR]:", err?.message || err);
+            diagnosticError = err;
           }
         }
 
@@ -938,6 +942,7 @@ export const diagnosticController = async (req, res) => {
             : null;
         const runtimeState = buildControllerRuntimeState(controller, {
           telemetry: responseTelemetry ?? telemetry,
+          error: diagnosticError,
         });
 
         return {

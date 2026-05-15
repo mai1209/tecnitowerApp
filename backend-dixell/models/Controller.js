@@ -7,7 +7,23 @@ const connectionStateSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    elfinOnline: {
+      type: Boolean,
+      default: false,
+    },
+    modbusOnline: {
+      type: Boolean,
+      default: false,
+    },
+    status: {
+      type: String,
+      enum: ["unknown", "online", "elfin_offline", "modbus_offline"],
+      default: "unknown",
+    },
+    message: String,
     lastSeenAt: Date,
+    lastElfinSeenAt: Date,
+    lastModbusOkAt: Date,
     lastPollAt: Date,
     lastPollError: String,
   },
@@ -38,7 +54,7 @@ const alertStateSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["none", "offline", "temperature_high", "temperature_low"],
+      enum: ["none", "offline", "elfin_offline", "modbus_offline", "temperature_high", "temperature_low"],
       default: "none",
     },
     severity: {

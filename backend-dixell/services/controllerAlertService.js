@@ -33,6 +33,52 @@ function isRecent(receivedAt, maxAgeMs) {
   return Date.now() - receivedAt.getTime() <= maxAgeMs;
 }
 
+function classifyCommunicationError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+
+  if (!message) {
+    return {
+      status: "unknown",
+      alertType: "offline",
+      message: "Sin comunicación reciente con el controlador.",
+    };
+  }
+
+  if (
+    message.includes("elfin tcp client no conectado") ||
+    message.includes("elfin tcp client no listo") ||
+    message.includes("conexión tcp del elfin")
+  ) {
+    return {
+      status: "elfin_offline",
+      alertType: "elfin_offline",
+      message:
+        "Elfin sin conexión al servidor. Revisá WiFi, router, energía del módulo o configuración TCP Client.",
+    };
+  }
+
+  if (
+    message.includes("timeout esperando respuesta tcp del elfin") ||
+    message.includes("modbus exception") ||
+    message.includes("respuesta modbus") ||
+    message.includes("unit id modbus")
+  ) {
+    return {
+      status: "modbus_offline",
+      alertType: "modbus_offline",
+      message:
+        "Elfin conectado, pero sin respuesta Modbus del controlador. Revisá cableado RS485, alimentación del controlador, Unit ID, baud rate y registros.",
+    };
+  }
+
+  return {
+    status: "modbus_offline",
+    alertType: "modbus_offline",
+    message:
+      "Elfin conectado, pero la lectura Modbus falló. Revisá cableado físico, controlador y configuración Modbus.",
+  };
+}
+
 function buildInactiveAlert(previousAlert, online, temperature) {
   return {
     active: false,
@@ -68,13 +114,39 @@ export function buildControllerRuntimeState(controller, { telemetry = null, erro
   const offlineAfterMs = getOfflineAfterMs(controller);
   const temperature = getTemperatureValue(telemetry);
   const recent = isRecent(receivedAt, offlineAfterMs);
-  const online = recent;
+  const errorClassification = classifyCommunicationError(error);
+  const hasError = Boolean(error);
+  const modbusOnline = hasError ? false : recent;
+  const elfinOnline = hasError
+    ? errorClassification.status !== "elfin_offline"
+    : recent || Boolean(controller?.connectionState?.elfinOnline);
+  const online = elfinOnline && modbusOnline;
+  const connectionStatus = online
+    ? "online"
+    : hasError
+      ? errorClassification.status
+      : "unknown";
+  const connectionMessage = online
+    ? "Elfin conectado y lectura Modbus activa."
+    : hasError
+      ? errorClassification.message
+      : "Sin diagnóstico reciente del controlador.";
   const { minTemperature, maxTemperature } = getTemperatureThresholds(controller);
   const alertsEnabled = controller?.alertConfig?.enabled !== false;
 
   const connectionState = {
     online,
+    elfinOnline,
+    modbusOnline,
+    status: connectionStatus,
+    message: connectionMessage,
     lastSeenAt: receivedAt,
+    lastElfinSeenAt: elfinOnline
+      ? new Date()
+      : controller?.connectionState?.lastElfinSeenAt ?? null,
+    lastModbusOkAt: modbusOnline
+      ? receivedAt
+      : controller?.connectionState?.lastModbusOkAt ?? null,
     lastPollAt: new Date(),
     lastPollError: error ? String(error?.message || error) : null,
   };
@@ -90,11 +162,9 @@ export function buildControllerRuntimeState(controller, { telemetry = null, erro
     return {
       connectionState,
       alertState: buildActiveAlert(previousAlert, {
-        type: "offline",
+        type: hasError ? errorClassification.alertType : "offline",
         severity: "critical",
-        message: error
-          ? `Sin comunicación reciente (${String(error?.message || error)})`
-          : "Sin comunicación reciente con el controlador",
+        message: connectionMessage,
         temperature,
         threshold: null,
         online,

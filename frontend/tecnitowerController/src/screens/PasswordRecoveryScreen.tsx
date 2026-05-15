@@ -25,11 +25,12 @@ type Props = {
   navigation: {
     navigate: (screen: string) => void;
   };
+  onLogout?: () => void;
 };
 
 type Step = "email" | "code" | "password";
 
-export default function PasswordRecoveryScreen({ navigation }: Props) {
+export default function PasswordRecoveryScreen({ navigation, onLogout }: Props) {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -39,6 +40,14 @@ export default function PasswordRecoveryScreen({ navigation }: Props) {
   const [message, setMessage] = useState("");
 
   const normalizedEmail = email.trim().toLowerCase();
+
+  const goToLogin = () => {
+    if (onLogout) {
+      onLogout();
+      return;
+    }
+    navigation.navigate("Login");
+  };
 
   const handleRequestCode = async () => {
     if (submitting) return;
@@ -104,7 +113,7 @@ export default function PasswordRecoveryScreen({ navigation }: Props) {
         newPassword,
       });
       Alert.alert("Contraseña actualizada", response.message, [
-        { text: "Ir al login", onPress: () => navigation.navigate("Login") },
+        { text: "Ir al login", onPress: goToLogin },
       ]);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "No se pudo actualizar la contraseña.");
@@ -228,7 +237,7 @@ export default function PasswordRecoveryScreen({ navigation }: Props) {
                   </TouchableOpacity>
                 )}
 
-                <TouchableOpacity style={styles.linkButton} onPress={() => navigation.navigate("Login")}>
+                <TouchableOpacity style={styles.linkButton} onPress={goToLogin}>
                   <Text style={styles.linkText}>Volver al login</Text>
                 </TouchableOpacity>
               </View>

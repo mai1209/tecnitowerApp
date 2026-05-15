@@ -17,10 +17,21 @@ import { fetchAdminUsers, sendAdminUserTestPush, updateAdminUser } from "../serv
 
 function controllerStatus(controller: any) {
   if (controller?.alertState?.active) {
+    const isConnectionAlert =
+      controller.alertState.type === "offline" ||
+      controller.alertState.type === "elfin_offline" ||
+      controller.alertState.type === "modbus_offline";
     return {
-      label: controller.alertState.type === "offline" ? "Offline" : "Alerta",
-      color: controller.alertState.type === "offline" ? "#991B1B" : "#92400E",
-      backgroundColor: controller.alertState.type === "offline" ? "#FEE2E2" : "#FEF3C7",
+      label:
+        controller.alertState.type === "elfin_offline"
+          ? "Elfin offline"
+          : controller.alertState.type === "modbus_offline"
+            ? "Lectura offline"
+            : isConnectionAlert
+              ? "Offline"
+              : "Alerta",
+      color: isConnectionAlert ? "#991B1B" : "#92400E",
+      backgroundColor: isConnectionAlert ? "#FEE2E2" : "#FEF3C7",
     };
   }
 

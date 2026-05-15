@@ -24,6 +24,10 @@ const PRESENTATION_READINGS = [
   { key: 'TMP1', label: 'Temperatura S1' },
 ];
 
+function isConnectionAlertType(type?: string | null) {
+  return type === 'offline' || type === 'elfin_offline' || type === 'modbus_offline';
+}
+
 function filterDefinitionsForRole(definitions: any[]) {
   return (definitions ?? []).filter((definition: any) => {
     if (definition?.visible === false) return false;
@@ -161,9 +165,11 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
   }, [fetchData]);
 
   const currentAlert = data.alertState;
+  const elfinOnline = Boolean(data.connectionState?.elfinOnline ?? data.online);
+  const modbusOnline = Boolean(data.connectionState?.modbusOnline ?? data.online);
   const showAlertBanner = Boolean(currentAlert?.active);
   const alertBannerStyle = showAlertBanner
-    ? currentAlert?.type === 'offline'
+    ? isConnectionAlertType(currentAlert?.type)
       ? {
           backgroundColor: '#FEF2F2',
           borderColor: '#FECACA',
@@ -180,8 +186,8 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
   const statusMessage = showAlertBanner
     ? currentAlert?.message
     : data.online
-      ? 'Comunicación estable con el controlador.'
-      : 'Sin comunicación reciente con el controlador.';
+      ? data.connectionState?.message || 'Elfin conectado y lectura Modbus activa.'
+      : data.connectionState?.message || 'Sin comunicación reciente con el controlador.';
 
   useEffect(() => {
     fetchData();
@@ -265,25 +271,37 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
               progressViewOffset={insets.top + 10} 
             />
           }
-          contentContainerStyle={[styles.scrollContent, { paddingTop: 0 }]}
+          contentContainerStyle={[styles.scrollContent, styles.scrollContentTop]}
         >
           <View style={styles.header}>
             <View style={styles.statusContainer}>
               <LinearGradient
-                colors={data.online ? ["#f0fdf4", "#dcfce7"] : ["#fef2f2", "#fee2e2"]}
+                colors={elfinOnline ? ["#f0fdf4", "#dcfce7"] : ["#fef2f2", "#fee2e2"]}
                 style={styles.statusPill}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
-                <View style={[styles.dot, data.online ? styles.dotOn : styles.dotOff]} />
-                <Text style={[styles.statusText, { color: data.online ? "#166534" : "#991b1b" }]}>
-                  {data.online ? 'ONLINE' : 'OFFLINE'}
+                <View style={[styles.dot, elfinOnline ? styles.dotOn : styles.dotOff]} />
+                <Text style={[styles.statusText, elfinOnline ? styles.statusTextOn : styles.statusTextOff]}>
+                  {elfinOnline ? 'ELFIN ONLINE' : 'ELFIN OFFLINE'}
+                </Text>
+              </LinearGradient>
+
+              <LinearGradient
+                colors={modbusOnline ? ["#f0fdf4", "#dcfce7"] : ["#fef2f2", "#fee2e2"]}
+                style={styles.statusPill}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <View style={[styles.dot, modbusOnline ? styles.dotOn : styles.dotOff]} />
+                <Text style={[styles.statusText, modbusOnline ? styles.statusTextOn : styles.statusTextOff]}>
+                  {modbusOnline ? 'LECTURA ONLINE' : 'LECTURA OFFLINE'}
                 </Text>
               </LinearGradient>
               
               <View style={styles.activityBadge}>
                 <Activity 
-                  color={data.online ? "#10B981" : "#EF4444"} 
+                  color={modbusOnline ? "#10B981" : "#EF4444"} 
                   size={14} 
                   strokeWidth={3} 
                 />
@@ -313,9 +331,9 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
                   </View>
                 );
               })}
-              {!data.online && (
+              {!modbusOnline && (
                 <Text style={styles.offlineHint}>
-                  Sin lectura Modbus; se muestran datos locales. Verifica baud/ID del controlador.
+                  Lectura Modbus offline; se muestran datos locales. Revisá cableado RS485, alimentación del controlador, Unit ID y baud rate.
                 </Text>
               )}
             </View>
@@ -416,7 +434,7 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
               controllerId={controller._id}
               token={session?.token}
               configuredRegisters={data.configuredRegisters}
-              online={data.online}
+              online={modbusOnline}
               profileCanWrite={data.userCanWrite}
             />
           </View>
@@ -434,6 +452,9 @@ const styles = StyleSheet.create({
   scrollContent: { 
     paddingBottom: 40, 
     paddingHorizontal: 20 
+  },
+  scrollContentTop: {
+    paddingTop: 0,
   },
   header: {
     flexDirection: 'row',
@@ -464,6 +485,12 @@ const styles = StyleSheet.create({
     fontSize: 10, 
     fontWeight: '900', 
     letterSpacing: 0.5 
+  },
+  statusTextOn: {
+    color: '#166534',
+  },
+  statusTextOff: {
+    color: '#991b1b',
   },
   activityBadge: {
     flexDirection: 'row',

@@ -167,8 +167,9 @@ function buildNotificationCopy(controller, transition, previousAlertState, nextA
   }
 
   const currentAlert = nextAlertState?.active ? nextAlertState : previousAlertState;
+  const connectionAlertTypes = new Set(["offline", "elfin_offline", "modbus_offline"]);
   const fallbackBody =
-    transition.alertType === "offline"
+    connectionAlertTypes.has(transition.alertType)
       ? `${controllerName} perdió comunicación.`
       : `${controllerName} tiene una alerta activa.`;
 
