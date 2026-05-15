@@ -66,6 +66,35 @@ function logPrefix(state) {
   return state?.elfinId ? `[TCP GATEWAY ${state.elfinId}]` : "[TCP GATEWAY]";
 }
 
+function formatDuration(ms) {
+  if (!Number.isFinite(ms) || ms < 0) return "-";
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes < 1) return `${seconds}s`;
+  return `${minutes}m ${remainingSeconds}s`;
+}
+
+function buildConnectionSnapshot(state) {
+  const now = Date.now();
+  const connectedMs = state?.connectedAtMs ? now - state.connectedAtMs : null;
+  const registeredMs = state?.registeredAt ? now - state.registeredAt.getTime() : null;
+  const lastSeenMs = state?.lastSeenAt ? now - state.lastSeenAt.getTime() : null;
+
+  return {
+    elfinId: state?.elfinId ?? null,
+    remoteAddress: state?.socket?.remoteAddress,
+    remotePort: state?.socket?.remotePort,
+    connectedFor: formatDuration(connectedMs),
+    registeredFor: formatDuration(registeredMs),
+    lastSeenAgo: formatDuration(lastSeenMs),
+    ready: Boolean(state?.ready),
+    pending: Boolean(state?.pending),
+    commandTimeouts: state?.commandTimeouts ?? 0,
+    bufferedBytes: state?.buffer?.length ?? 0,
+  };
+}
+
 // ─── gestión de conexiones ─────────────────────────────────────────────────────
 
 function attachConnection(elfinId, state) {
@@ -87,14 +116,14 @@ function attachConnection(elfinId, state) {
     clearTimeout(state.registrationTimeout);
     state.registrationTimeout = null;
   }
-  console.log(`${logPrefix(state)} conexión registrada`);
+  console.log(`${logPrefix(state)} conexión registrada`, buildConnectionSnapshot(state));
 
   // Marcar como listo después del delay para evitar la carrera inicial
   setTimeout(() => {
     // Verificar que el socket siga siendo el mismo (no fue reemplazado)
     if (connections.get(normalizedElfinId) === state && !state.socket.destroyed) {
       state.ready = true;
-      console.log(`${logPrefix(state)} canal RS485 listo`);
+      console.log(`${logPrefix(state)} canal RS485 listo`, buildConnectionSnapshot(state));
     }
   }, READY_DELAY_MS);
 }
@@ -109,7 +138,10 @@ function detachConnection(state) {
 
 function destroyConnection(state, reason = "socket descartado") {
   if (!state?.socket || state.socket.destroyed) return;
-  console.warn(`${logPrefix(state)} ${reason}; cerrando socket para forzar reconexión`);
+  console.warn(
+    `${logPrefix(state)} ${reason}; cerrando socket para forzar reconexión`,
+    buildConnectionSnapshot(state)
+  );
   detachConnection(state);
   try {
     state.socket.destroy();
@@ -206,7 +238,12 @@ function handleSocketData(state, chunk) {
   resolvePending(state);
 }
 
-function handleSocketClose(state, reason = "closed") {
+function handleSocketClose(state, reason = "closed", details = {}) {
+  console.warn(`${logPrefix(state)} socket ${reason}`, {
+    ...buildConnectionSnapshot(state),
+    ...details,
+  });
+
   if (state.registrationTimeout) {
     clearTimeout(state.registrationTimeout);
     state.registrationTimeout = null;
@@ -222,6 +259,7 @@ function handleSocketClose(state, reason = "closed") {
 function createConnectionState(socket) {
   const state = {
     socket,
+    connectedAtMs: Date.now(),
     elfinId: null,
     registeredAt: null,
     lastSeenAt: null,
@@ -240,11 +278,18 @@ function createConnectionState(socket) {
   }, REGISTRATION_TIMEOUT_MS);
 
   socket.on("data", (chunk) => handleSocketData(state, chunk));
-  socket.on("close", () => handleSocketClose(state, "cerrada"));
-  socket.on("end", () => handleSocketClose(state, "finalizada"));
+  socket.on("close", (hadError) => handleSocketClose(state, "cerrado", { hadError }));
+  socket.on("end", () => handleSocketClose(state, "finalizado por remoto"));
   socket.on("error", (err) => {
-    console.error(`${logPrefix(state)} socket error:`, err?.message || err);
-    handleSocketClose(state, err?.message || "error");
+    console.error(`${logPrefix(state)} socket error:`, {
+      message: err?.message || String(err),
+      code: err?.code,
+      ...buildConnectionSnapshot(state),
+    });
+    handleSocketClose(state, "error", {
+      error: err?.message || String(err),
+      code: err?.code,
+    });
   });
 
   return state;
