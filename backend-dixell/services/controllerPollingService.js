@@ -6,7 +6,7 @@ import { buildControllerRuntimeState } from "./controllerAlertService.js";
 import { publishControllerRealtime } from "./controllerRealtimeService.js";
 import { notifyControllerAlertTransition } from "./pushNotificationService.js";
 
-const POLL_INTERVAL_MS = Number(process.env.CONTROLLER_POLL_INTERVAL_MS ?? 12000);
+const POLL_INTERVAL_MS = Number(process.env.CONTROLLER_POLL_INTERVAL_MS ?? 5000);
 const ACTIVE_WINDOW_MS = Number(process.env.CONTROLLER_POLL_ACTIVE_WINDOW_MS ?? 180000);
 const BACKGROUND_POLL_INTERVAL_MS = Number(
   process.env.CONTROLLER_BACKGROUND_POLL_INTERVAL_MS ?? 60000
@@ -30,7 +30,7 @@ function isFinitePositive(value) {
 }
 
 function getPollIntervalMs() {
-  return isFinitePositive(POLL_INTERVAL_MS) ? POLL_INTERVAL_MS : 12000;
+  return isFinitePositive(POLL_INTERVAL_MS) ? POLL_INTERVAL_MS : 5000;
 }
 
 function getActiveWindowMs() {

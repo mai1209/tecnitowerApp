@@ -113,14 +113,15 @@ export type SetpointScanResponse = {
 
 
 
-const LOCAL_API_URL = "http://192.168.100.63:3001";
 const CLOUD_API_URL = "http://147.15.48.169:3001";
 
-export const DEFAULT_API_BASE_URL = __DEV__
-  ? LOCAL_API_URL
-  : CLOUD_API_URL;
+export const DEFAULT_API_BASE_URL = CLOUD_API_URL;
 
 export async function getApiBaseUrl() {
+  const storedUrl = await AsyncStorage.getItem(STORAGE_KEYS.apiBaseUrl);
+  const normalizedStoredUrl = normalizeApiBaseUrl(storedUrl);
+  if (normalizedStoredUrl) return normalizedStoredUrl;
+
   return DEFAULT_API_BASE_URL;
 }
 

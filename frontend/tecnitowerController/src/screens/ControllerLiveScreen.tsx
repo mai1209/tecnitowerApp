@@ -15,7 +15,7 @@ import AppLayout from '../layouts/AppLayout';
 import { fetchDiagnostic, getControllerWebSocketUrl } from '../services/api';
 import RemoteControlScreen from './RemoteControlScreen';
 import { STORAGE_KEYS } from '../constants/storageKeys';
-import { Activity, BellRing, Cpu, Settings2, Thermometer } from 'lucide-react-native';
+import { BellRing, Cpu, Settings2, Thermometer } from 'lucide-react-native';
 
 const PRESENTATION_READINGS = [
   { key: 'SET', label: 'Setpoint normal' },
@@ -23,6 +23,7 @@ const PRESENTATION_READINGS = [
   { key: 'US', label: 'Setpoint máximo' },
   { key: 'TMP1', label: 'Temperatura S1' },
 ];
+const LIVE_REFRESH_INTERVAL_MS = 5000;
 
 function isConnectionAlertType(type?: string | null) {
   return type === 'offline' || type === 'elfin_offline' || type === 'modbus_offline';
@@ -167,9 +168,16 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
   const currentAlert = data.alertState;
   const elfinOnline = Boolean(data.connectionState?.elfinOnline ?? data.online);
   const modbusOnline = Boolean(data.connectionState?.modbusOnline ?? data.online);
+  const gatewayOnline = elfinOnline;
+  const connectionStatusMessage = !gatewayOnline
+    ? 'Lectura Modbus no verificable porque el gateway/Elfin no está conectado al servidor. Revisá WiFi, internet, energía del Elfin o configuración TCP Client.'
+    : !modbusOnline
+      ? 'Gateway conectado, pero el controlador no entrega datos Modbus. Revisá cableado RS485, alimentación del controlador, Unit ID, baud rate y registros.'
+      : 'Gateway conectado y lectura Modbus activa.';
   const showAlertBanner = Boolean(currentAlert?.active);
+  const showConnectionAlert = showAlertBanner && isConnectionAlertType(currentAlert?.type);
   const alertBannerStyle = showAlertBanner
-    ? isConnectionAlertType(currentAlert?.type)
+    ? showConnectionAlert
       ? {
           backgroundColor: '#FEF2F2',
           borderColor: '#FECACA',
@@ -183,15 +191,16 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
           textColor: '#78350F',
         }
     : null;
-  const statusMessage = showAlertBanner
-    ? currentAlert?.message
-    : data.online
-      ? data.connectionState?.message || 'Elfin conectado y lectura Modbus activa.'
-      : data.connectionState?.message || 'Sin comunicación reciente con el controlador.';
+  const statusMessage = showConnectionAlert
+    ? connectionStatusMessage
+    : showAlertBanner && currentAlert?.message
+      ? `${connectionStatusMessage} ${currentAlert.message}`
+      : connectionStatusMessage;
+  const statusMessageTitle = modbusOnline ? 'LECTURA MODBUS ONLINE' : 'LECTURA MODBUS OFFLINE';
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 30000);
+    const interval = setInterval(fetchData, LIVE_REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [fetchData]);
 
@@ -276,37 +285,16 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
           <View style={styles.header}>
             <View style={styles.statusContainer}>
               <LinearGradient
-                colors={elfinOnline ? ["#f0fdf4", "#dcfce7"] : ["#fef2f2", "#fee2e2"]}
+                colors={gatewayOnline ? ["#f0fdf4", "#dcfce7"] : ["#fef2f2", "#fee2e2"]}
                 style={styles.statusPill}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
-                <View style={[styles.dot, elfinOnline ? styles.dotOn : styles.dotOff]} />
-                <Text style={[styles.statusText, elfinOnline ? styles.statusTextOn : styles.statusTextOff]}>
-                  {elfinOnline ? 'ELFIN ONLINE' : 'ELFIN OFFLINE'}
+                <View style={[styles.dot, gatewayOnline ? styles.dotOn : styles.dotOff]} />
+                <Text style={[styles.statusText, gatewayOnline ? styles.statusTextOn : styles.statusTextOff]}>
+                  {gatewayOnline ? 'GATEWAY ONLINE' : 'GATEWAY OFFLINE'}
                 </Text>
               </LinearGradient>
-
-              <LinearGradient
-                colors={modbusOnline ? ["#f0fdf4", "#dcfce7"] : ["#fef2f2", "#fee2e2"]}
-                style={styles.statusPill}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                <View style={[styles.dot, modbusOnline ? styles.dotOn : styles.dotOff]} />
-                <Text style={[styles.statusText, modbusOnline ? styles.statusTextOn : styles.statusTextOff]}>
-                  {modbusOnline ? 'LECTURA ONLINE' : 'LECTURA OFFLINE'}
-                </Text>
-              </LinearGradient>
-              
-              <View style={styles.activityBadge}>
-                <Activity 
-                  color={modbusOnline ? "#10B981" : "#EF4444"} 
-                  size={14} 
-                  strokeWidth={3} 
-                />
-                <Text style={styles.liveText}>LIVE</Text>
-              </View>
             </View>
           </View>
 
@@ -364,7 +352,7 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
                     : undefined,
                 ]}
               >
-                {showAlertBanner ? 'ALERTA DEL CONTROLADOR' : 'ESTADO DEL CONTROLADOR'}
+                {statusMessageTitle}
               </Text>
               <Text
                 style={[
