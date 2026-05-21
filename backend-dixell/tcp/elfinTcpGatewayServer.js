@@ -13,7 +13,7 @@ const READY_DELAY_MS = Number(process.env.TCP_GATEWAY_READY_DELAY_MS ?? 400);
 // Intervalo de keep-alive TCP en ms. Mantiene viva la conexión NAT
 // en routers domésticos/industriales que cierran sesiones idle.
 const KEEP_ALIVE_INTERVAL_MS = Number(process.env.TCP_GATEWAY_KEEP_ALIVE_MS ?? 10000);
-const DESTROY_AFTER_TIMEOUTS = Number(process.env.TCP_GATEWAY_DESTROY_AFTER_TIMEOUTS ?? 0);
+const DESTROY_AFTER_TIMEOUTS = Number(process.env.TCP_GATEWAY_DESTROY_AFTER_TIMEOUTS ?? 1);
 const REGISTRATION_TIMEOUT_MS = Number(process.env.TCP_GATEWAY_REGISTRATION_TIMEOUT_MS ?? 5000);
 const MAX_IDENTITY_BUFFER_BYTES = Number(process.env.TCP_GATEWAY_MAX_IDENTITY_BUFFER_BYTES ?? 256);
 const ALLOW_BARE_ELFIN_ID = String(process.env.TCP_GATEWAY_ALLOW_BARE_ID ?? "").trim() === "1";
