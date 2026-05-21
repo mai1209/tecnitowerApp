@@ -11,14 +11,13 @@ function withElfinTcpLock(elfinId, fn) {
   const key = String(elfinId ?? "").trim().toUpperCase();
   const previous = pendingLocks.get(key) ?? Promise.resolve();
   const next = previous.then(fn, fn);
-  pendingLocks.set(
-    key,
-    next.finally(() => {
-      if (pendingLocks.get(key) === next) {
-        pendingLocks.delete(key);
-      }
-    })
-  );
+  const cleanup = next.finally(() => {
+    if (pendingLocks.get(key) === next) {
+      pendingLocks.delete(key);
+    }
+  });
+  cleanup.catch(() => {});
+  pendingLocks.set(key, next);
   return next;
 }
 

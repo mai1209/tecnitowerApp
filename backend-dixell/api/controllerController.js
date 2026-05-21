@@ -17,6 +17,7 @@ import {
   readRegistersSnapshotViaElfinTcpClient,
   writeRegisterValueViaElfinTcpClient,
 } from "../services/elfinTcpClientModbusService.js";
+import { getTcpGatewayConnectionInfo } from "../tcp/elfinTcpGatewayServer.js";
 import {
   getCachedDiagnostic,
   invalidateDiagnosticCache,
@@ -533,7 +534,55 @@ export const listControllers = async (req, res) => {
     }
 
     const controllers = await ControllerModel.find({ owner }).sort({ createdAt: -1 }).lean();
-    res.json({ controllers });
+    const normalizedControllers = await Promise.all(
+      controllers.map(async (controller) => {
+        if (!shouldUseTcpClientControl(controller)) return controller;
+
+        touchControllerPolling(controller._id);
+
+        const connectionInfo = getTcpGatewayConnectionInfo(controller.elfinId);
+        const hadGatewayOnline = Boolean(controller?.connectionState?.elfinOnline);
+        const hadModbusOnline = Boolean(controller?.connectionState?.modbusOnline);
+        const runtimeState = connectionInfo
+          ? buildControllerRuntimeState(controller, {
+              telemetry: hadModbusOnline ? controller?.lastTelemetry ?? null : null,
+              error: hadModbusOnline
+                ? null
+                : new Error(`Timeout esperando respuesta Modbus del controlador (${controller.elfinId})`),
+            })
+          : buildControllerRuntimeState(controller, {
+              telemetry: controller?.lastTelemetry ?? null,
+              error: new Error(`Elfin TCP Client no conectado (${controller.elfinId})`),
+            });
+
+        const gatewayChanged = hadGatewayOnline !== Boolean(runtimeState.connectionState?.elfinOnline);
+        const modbusChanged = hadModbusOnline !== Boolean(runtimeState.connectionState?.modbusOnline);
+        const alertTypeChanged =
+          String(controller?.alertState?.type ?? "") !== String(runtimeState?.alertState?.type ?? "");
+
+        if (gatewayChanged || modbusChanged || alertTypeChanged) {
+          await ControllerModel.updateOne(
+            { _id: controller._id },
+            {
+              $set: {
+                connectionState: runtimeState.connectionState,
+                alertState: runtimeState.alertState,
+              },
+            }
+          );
+          invalidateDiagnosticCache(controller._id);
+          publishControllerRealtime(controller._id, { reason: "controller-list-state-refresh" });
+        }
+
+        return {
+          ...controller,
+          connectionState: runtimeState.connectionState,
+          alertState: runtimeState.alertState,
+        };
+      })
+    );
+
+    res.json({ controllers: normalizedControllers });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Error leyendo controladores" });
