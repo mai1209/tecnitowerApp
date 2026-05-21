@@ -59,6 +59,7 @@ function classifyCommunicationError(error) {
 
   if (
     message.includes("timeout esperando respuesta tcp del elfin") ||
+    message.includes("timeout esperando respuesta modbus del controlador") ||
     message.includes("modbus exception") ||
     message.includes("respuesta modbus") ||
     message.includes("unit id modbus")

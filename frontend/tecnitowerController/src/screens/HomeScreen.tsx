@@ -14,6 +14,8 @@ import { deleteController, fetchControllers } from '../services/api';
 import { AuthSession } from '../types/auth';
 import { SkipForward, Trash2 } from 'lucide-react-native';
 
+const CONTROLLERS_REFRESH_INTERVAL_MS = 5000;
+
 type Props = {
   navigation: any;
   session: AuthSession;
@@ -21,22 +23,34 @@ type Props = {
 };
 
 function getControllerRuntimeStatus(controller: any) {
-  const online = Boolean(controller?.connectionState?.online);
+  const connectionState = controller?.connectionState ?? {};
+  const gatewayOnline = Boolean(connectionState?.elfinOnline ?? connectionState?.online);
+  const modbusOnline = Boolean(connectionState?.modbusOnline ?? connectionState?.online);
   const alert = controller?.alertState ?? null;
 
-  if (alert?.active) {
-    if (alert.type === 'offline' || alert.type === 'elfin_offline' || alert.type === 'modbus_offline') {
-      return {
-        label: alert.type === 'elfin_offline' ? 'Elfin offline' : alert.type === 'modbus_offline' ? 'Lectura offline' : 'Sin conexión',
-        detail: alert.message || 'El equipo no reporta comunicación reciente.',
-        backgroundColor: '#FEE2E2',
-        textColor: '#991B1B',
-        dotColor: '#DC2626',
-      };
-    }
-
+  if (!gatewayOnline) {
     return {
-      label: 'Alerta activa',
+      label: 'Gateway offline',
+      detail: 'Lectura Modbus no verificable porque el gateway/Elfin no está conectado al servidor.',
+      backgroundColor: '#FEE2E2',
+      textColor: '#991B1B',
+      dotColor: '#DC2626',
+    };
+  }
+
+  if (!modbusOnline) {
+    return {
+      label: 'Gateway online · Modbus offline',
+      detail: 'Gateway conectado, pero el controlador no entrega datos Modbus. Revisá RS485, alimentación, Unit ID, baud rate y registros.',
+      backgroundColor: '#FEF3C7',
+      textColor: '#92400E',
+      dotColor: '#D97706',
+    };
+  }
+
+  if (alert?.active) {
+    return {
+      label: 'Gateway online · Modbus online',
       detail: alert.message || 'El controlador tiene una alerta pendiente.',
       backgroundColor: '#FEF3C7',
       textColor: '#92400E',
@@ -44,9 +58,9 @@ function getControllerRuntimeStatus(controller: any) {
     };
   }
 
-  if (online) {
+  if (gatewayOnline && modbusOnline) {
     return {
-      label: 'Online',
+      label: 'Gateway online · Modbus online',
       detail: 'Equipo comunicando correctamente.',
       backgroundColor: '#DCFCE7',
       textColor: '#166534',
@@ -73,8 +87,9 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
   useFocusEffect(
     useCallback(() => {
       let isMounted = true;
+      let refreshInterval: ReturnType<typeof setInterval> | null = null;
 
-      async function loadControllers() {
+      async function loadControllers(showLoading = false) {
         if (!session?.token) {
           if (isMounted) {
             setError('Sesion invalida (token faltante). Cerra sesion e inicia de nuevo.');
@@ -82,7 +97,9 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
           }
           return;
         }
-        setLoading(true);
+        if (showLoading) {
+          setLoading(true);
+        }
         setError('');
         try {
           const response = await fetchControllers(session.token);
@@ -102,9 +119,16 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
         }
       }
 
-      loadControllers();
+      loadControllers(true);
+      refreshInterval = setInterval(() => {
+        loadControllers(false);
+      }, CONTROLLERS_REFRESH_INTERVAL_MS);
+
       return () => {
         isMounted = false;
+        if (refreshInterval) {
+          clearInterval(refreshInterval);
+        }
       };
     }, [session?.token]),
   );
