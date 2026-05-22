@@ -30,6 +30,7 @@ const XR35_SETPOINT_REGISTER = 768;
 const STATUS_REGISTER = 1280;
 const DEFAULT_XR35_UNIT_ID = 1;
 const DIAGNOSTIC_TELEMETRY_FRESH_MS = Number(process.env.DIAGNOSTIC_TELEMETRY_FRESH_MS ?? 20000);
+const TCP_RECONNECT_CONFIRM_MS = Number(process.env.TCP_RECONNECT_CONFIRM_MS ?? 2500);
 
 function resolveControllerConnection(controller) {
   const model = String(controller?.dixellModel ?? "").toUpperCase();
@@ -317,6 +318,42 @@ function shouldUseTcpClientControl(controller = null) {
 
 function shouldUseMqttControl(controller = null) {
   return shouldUseAgentMqttControl(controller) || shouldUseElfinMqttControl(controller);
+}
+
+function isFinitePositive(value) {
+  return Number.isFinite(value) && value > 0;
+}
+
+function getTcpClientErrorKind(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  if (message.includes("timeout esperando respuesta modbus del controlador")) {
+    return "modbus_timeout";
+  }
+  if (
+    message.includes("elfin tcp client no conectado") ||
+    message.includes("elfin tcp client no listo") ||
+    message.includes("conexión tcp del elfin")
+  ) {
+    return "gateway_missing";
+  }
+  return "other";
+}
+
+async function resolveTcpClientDiagnosticError(controller, error) {
+  if (!shouldUseTcpClientControl(controller)) return error;
+
+  const kind = getTcpClientErrorKind(error);
+  if (kind === "other") return error;
+
+  const waitMs = isFinitePositive(TCP_RECONNECT_CONFIRM_MS) ? TCP_RECONNECT_CONFIRM_MS : 2500;
+  await new Promise((resolve) => setTimeout(resolve, waitMs));
+
+  const connectionInfo = getTcpGatewayConnectionInfo(controller?.elfinId);
+  if (connectionInfo) {
+    return new Error(`Timeout esperando respuesta Modbus del controlador (${controller?.elfinId})`);
+  }
+
+  return new Error(`Elfin TCP Client no conectado (${controller?.elfinId})`);
 }
 
 function requiresLocalIp(gatewayMode) {
@@ -847,7 +884,7 @@ export const diagnosticController = async (req, res) => {
             });
           } catch (err) {
             console.error("❌ [DIAGNOSTIC TCP CLIENT ERROR]:", err?.message || err);
-            diagnosticError = err;
+            diagnosticError = await resolveTcpClientDiagnosticError(controller, err);
           }
         } else if (shouldUseTcpClientControl(controller) && recentTelemetry) {
           modbusOnline = true;
