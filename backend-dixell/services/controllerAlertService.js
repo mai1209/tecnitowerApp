@@ -1,4 +1,5 @@
 const DEFAULT_OFFLINE_AFTER_MS = Number(process.env.ALERT_OFFLINE_AFTER_MS ?? 60000);
+const DEFAULT_ELFIN_RECENTLY_SEEN_MS = Number(process.env.ELFIN_RECENTLY_SEEN_MS ?? 30000);
 
 function getOfflineAfterMs(controller) {
   const configured = Number(controller?.alertConfig?.offlineAfterMs);
@@ -31,6 +32,21 @@ function getReceivedAt(telemetry, fallback = null) {
 function isRecent(receivedAt, maxAgeMs) {
   if (!(receivedAt instanceof Date) || Number.isNaN(receivedAt.getTime())) return false;
   return Date.now() - receivedAt.getTime() <= maxAgeMs;
+}
+
+function getRecentGatewaySeenAt(connectionState) {
+  const rawValue = connectionState?.lastElfinSeenAt ?? connectionState?.lastPollAt ?? null;
+  if (!rawValue) return null;
+  const seenAt = new Date(rawValue);
+  return seenAt instanceof Date && !Number.isNaN(seenAt.getTime()) ? seenAt : null;
+}
+
+function isRecentlySeenGateway(connectionState) {
+  const seenAt = getRecentGatewaySeenAt(connectionState);
+  const maxAgeMs = Number.isFinite(DEFAULT_ELFIN_RECENTLY_SEEN_MS) && DEFAULT_ELFIN_RECENTLY_SEEN_MS >= 1000
+    ? DEFAULT_ELFIN_RECENTLY_SEEN_MS
+    : 30000;
+  return isRecent(seenAt, maxAgeMs);
 }
 
 function classifyCommunicationError(error) {
@@ -118,19 +134,29 @@ export function buildControllerRuntimeState(controller, { telemetry = null, erro
   const errorClassification = classifyCommunicationError(error);
   const hasError = Boolean(error);
   const modbusOnline = hasError ? false : recent;
+  const recentlySeenGateway = isRecentlySeenGateway(previousConnection);
   const elfinOnline = hasError
-    ? errorClassification.status !== "elfin_offline"
+    ? errorClassification.status !== "elfin_offline" || recentlySeenGateway
     : recent || Boolean(controller?.connectionState?.elfinOnline);
+  const resolvedErrorClassification =
+    hasError && errorClassification.status === "elfin_offline" && recentlySeenGateway
+      ? {
+          status: "modbus_offline",
+          alertType: "modbus_offline",
+          message:
+            "Gateway reconectando, pero el controlador no entrega datos Modbus. Revisá cableado RS485, alimentación del controlador, Unit ID, baud rate y registros.",
+        }
+      : errorClassification;
   const online = elfinOnline && modbusOnline;
   const connectionStatus = online
     ? "online"
     : hasError
-      ? errorClassification.status
+      ? resolvedErrorClassification.status
       : "unknown";
   const connectionMessage = online
     ? "Elfin conectado y lectura Modbus activa."
     : hasError
-      ? errorClassification.message
+      ? resolvedErrorClassification.message
       : "Sin diagnóstico reciente del controlador.";
   const { minTemperature, maxTemperature } = getTemperatureThresholds(controller);
   const alertsEnabled = controller?.alertConfig?.enabled !== false;
@@ -163,7 +189,7 @@ export function buildControllerRuntimeState(controller, { telemetry = null, erro
     return {
       connectionState,
       alertState: buildActiveAlert(previousAlert, {
-        type: hasError ? errorClassification.alertType : "offline",
+        type: hasError ? resolvedErrorClassification.alertType : "offline",
         severity: "critical",
         message: connectionMessage,
         temperature,
