@@ -5,12 +5,14 @@ import { invalidateDiagnosticCache } from "./diagnosticCacheService.js";
 import { buildControllerRuntimeState } from "./controllerAlertService.js";
 import { publishControllerRealtime } from "./controllerRealtimeService.js";
 import { notifyControllerAlertTransition } from "./pushNotificationService.js";
+import { getTcpGatewayConnectionInfo } from "../tcp/elfinTcpGatewayServer.js";
 
 const POLL_INTERVAL_MS = Number(process.env.CONTROLLER_POLL_INTERVAL_MS ?? 5000);
 const ACTIVE_WINDOW_MS = Number(process.env.CONTROLLER_POLL_ACTIVE_WINDOW_MS ?? 180000);
 const BACKGROUND_POLL_INTERVAL_MS = Number(
   process.env.CONTROLLER_BACKGROUND_POLL_INTERVAL_MS ?? 60000
 );
+const TCP_RECONNECT_CONFIRM_MS = Number(process.env.TCP_RECONNECT_CONFIRM_MS ?? 2500);
 
 const activeControllers = new Map();
 let pollTimer = null;
@@ -35,6 +37,24 @@ function getPollIntervalMs() {
 
 function getActiveWindowMs() {
   return isFinitePositive(ACTIVE_WINDOW_MS) ? ACTIVE_WINDOW_MS : 180000;
+}
+
+function isModbusTimeoutError(error) {
+  return String(error?.message || error || "")
+    .toLowerCase()
+    .includes("timeout esperando respuesta modbus del controlador");
+}
+
+async function resolveTcpClientPollingError(controller, error) {
+  if (!isModbusTimeoutError(error)) return error;
+
+  const waitMs = isFinitePositive(TCP_RECONNECT_CONFIRM_MS) ? TCP_RECONNECT_CONFIRM_MS : 2500;
+  await new Promise((resolve) => setTimeout(resolve, waitMs));
+
+  const connectionInfo = getTcpGatewayConnectionInfo(controller?.elfinId);
+  if (connectionInfo) return error;
+
+  return new Error(`Elfin TCP Client no conectado (${controller?.elfinId})`);
 }
 
 function getTelemetryRegisterValue(payload, register) {
@@ -171,9 +191,10 @@ async function pollController(controller) {
 }
 
 async function updateControllerPollingErrorState(controller, error) {
+  const resolvedError = await resolveTcpClientPollingError(controller, error);
   const runtimeState = buildControllerRuntimeState(controller, {
     telemetry: controller?.lastTelemetry ?? null,
-    error,
+    error: resolvedError,
   });
 
   await ControllerModel.updateOne(
@@ -191,7 +212,7 @@ async function updateControllerPollingErrorState(controller, error) {
     Boolean(controller?.alertState?.active) !== Boolean(runtimeState?.alertState?.active) ||
     String(controller?.alertState?.type ?? "") !== String(runtimeState?.alertState?.type ?? "")
   ) {
-    await notifyControllerAlertTransition({
+        await notifyControllerAlertTransition({
       controller,
       previousAlertState: controller?.alertState ?? null,
       nextAlertState: runtimeState?.alertState ?? null,
