@@ -17,6 +17,7 @@ import AdminUserControllersScreen from '../screens/AdminUserControllersScreen';
 import AdminControllerConfigHubScreen from '../screens/AdminControllerConfigHubScreen';
 import DeviceModelAdminScreen from '../screens/DeviceModelAdminScreen';
 import DeviceModelFormScreen from '../screens/DeviceModelFormScreen';
+import SettingsSectionScreen from '../screens/SettingsSectionScreen';
 import { AuthSession } from '../types/auth';
 import { STORAGE_KEYS } from '../constants/storageKeys';
 import {
@@ -224,6 +225,15 @@ export const AppNavigator = () => {
                 );
               }}
             </Stack.Screen>
+            <Stack.Screen name="SettingsSection">
+              {props => (
+                <SettingsSectionScreen
+                  {...props}
+                  session={session}
+                  onLogout={handleLogout}
+                />
+              )}
+            </Stack.Screen>
             <Stack.Screen name="PasswordRecovery">
               {props => {
                 const PasswordRecoveryScreen = require('../screens/PasswordRecoveryScreen').default;
@@ -283,6 +293,10 @@ export const AppNavigator = () => {
             <Stack.Screen
               name="Settings"
               getComponent={() => require('../screens/SettingsScreen').default}
+            />
+            <Stack.Screen
+              name="SettingsSection"
+              getComponent={() => require('../screens/SettingsSectionScreen').default}
             />
             <Stack.Screen
               name="PasswordRecovery"

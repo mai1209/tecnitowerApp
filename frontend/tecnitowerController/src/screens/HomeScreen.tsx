@@ -7,12 +7,18 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   ScrollView,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import AppLayout from '../layouts/AppLayout';
-import { deleteController, fetchControllers } from '../services/api';
+import {
+  deleteController,
+  fetchControllers,
+  updateControllerName,
+} from '../services/api';
 import { AuthSession } from '../types/auth';
-import { SkipForward, Trash2 } from 'lucide-react-native';
+import { PencilLine, SkipForward, Trash2 } from 'lucide-react-native';
 
 const CONTROLLERS_REFRESH_INTERVAL_MS = 5000;
 
@@ -24,14 +30,19 @@ type Props = {
 
 function getControllerRuntimeStatus(controller: any) {
   const connectionState = controller?.connectionState ?? {};
-  const gatewayOnline = Boolean(connectionState?.elfinOnline ?? connectionState?.online);
-  const modbusOnline = Boolean(connectionState?.modbusOnline ?? connectionState?.online);
+  const gatewayOnline = Boolean(
+    connectionState?.elfinOnline ?? connectionState?.online,
+  );
+  const modbusOnline = Boolean(
+    connectionState?.modbusOnline ?? connectionState?.online,
+  );
   const alert = controller?.alertState ?? null;
 
   if (!gatewayOnline) {
     return {
       label: 'Gateway offline',
-      detail: 'Lectura Modbus no verificable porque el gateway/Elfin no está conectado al servidor.',
+      detail:
+        'Lectura Modbus no verificable porque el gateway/Elfin no está conectado al servidor.',
       backgroundColor: '#FEE2E2',
       textColor: '#991B1B',
       dotColor: '#DC2626',
@@ -41,7 +52,8 @@ function getControllerRuntimeStatus(controller: any) {
   if (!modbusOnline) {
     return {
       label: 'Gateway online · Modbus offline',
-      detail: 'Gateway conectado, pero el controlador no entrega datos Modbus. Revisá RS485, alimentación, Unit ID, baud rate y registros.',
+      detail:
+        'Gateway conectado, pero el controlador no entrega datos Modbus. Revisá RS485, alimentación, Unit ID, baud rate y registros.',
       backgroundColor: '#FEF3C7',
       textColor: '#92400E',
       dotColor: '#D97706',
@@ -81,8 +93,12 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
   const [controllers, setControllers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingController, setEditingController] = useState<any | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [savingName, setSavingName] = useState(false);
   const [error, setError] = useState('');
-  const canWrite = session?.user?.role === 'admin' || session?.user?.canWrite === true;
+  const canWrite =
+    session?.user?.role === 'admin' || session?.user?.canWrite === true;
 
   useFocusEffect(
     useCallback(() => {
@@ -92,7 +108,9 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
       async function loadControllers(showLoading = false) {
         if (!session?.token) {
           if (isMounted) {
-            setError('Sesion invalida (token faltante). Cerra sesion e inicia de nuevo.');
+            setError(
+              'Sesion invalida (token faltante). Cerra sesion e inicia de nuevo.',
+            );
             setLoading(false);
           }
           return;
@@ -133,49 +151,103 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
     }, [session?.token]),
   );
 
-  const handleDeleteController = useCallback((controller: any) => {
-    if (!session?.token || deletingId) return;
+  const handleDeleteController = useCallback(
+    (controller: any) => {
+      if (!session?.token || deletingId) return;
 
-    Alert.alert(
-      'Eliminar controlador',
-      `Se va a eliminar "${controller?.name ?? 'este controlador'}". Esta acción no se puede deshacer.`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setDeletingId(String(controller._id));
-              setError('');
-              await deleteController(String(controller._id), session.token);
-              setControllers((current) => current.filter((item) => item._id !== controller._id));
-            } catch (err) {
-              setError(
-                err instanceof Error
-                  ? err.message
-                  : 'No se pudo eliminar el controlador',
-              );
-            } finally {
-              setDeletingId(null);
-            }
+      Alert.alert(
+        'Eliminar controlador',
+        `Se va a eliminar "${
+          controller?.name ?? 'este controlador'
+        }". Esta acción no se puede deshacer.`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Eliminar',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                setDeletingId(String(controller._id));
+                setError('');
+                await deleteController(String(controller._id), session.token);
+                setControllers(current =>
+                  current.filter(item => item._id !== controller._id),
+                );
+              } catch (err) {
+                setError(
+                  err instanceof Error
+                    ? err.message
+                    : 'No se pudo eliminar el controlador',
+                );
+              } finally {
+                setDeletingId(null);
+              }
+            },
           },
-        },
-      ],
-    );
-  }, [deletingId, session?.token]);
+        ],
+      );
+    },
+    [deletingId, session?.token],
+  );
+
+  const handleEditController = useCallback((controller: any) => {
+    setEditingController(controller);
+    setEditingName(String(controller?.name ?? ''));
+  }, []);
+
+  const handleCloseEditName = useCallback(() => {
+    if (savingName) return;
+    setEditingController(null);
+    setEditingName('');
+  }, [savingName]);
+
+  const handleSaveControllerName = useCallback(async () => {
+    if (!session?.token || !editingController?._id || savingName) return;
+
+    const nextName = editingName.trim();
+    if (!nextName) {
+      Alert.alert('Nombre requerido', 'Ingresá un nombre para el controlador.');
+      return;
+    }
+
+    if (nextName.length > 150) {
+      Alert.alert(
+        'Nombre muy largo',
+        'El nombre puede tener hasta 150 caracteres.',
+      );
+      return;
+    }
+
+    setSavingName(true);
+    setError('');
+    try {
+      await updateControllerName(String(editingController._id), nextName, session.token);
+      setControllers(current =>
+        current.map(controller =>
+          controller._id === editingController._id
+            ? { ...controller, name: nextName }
+            : controller,
+        ),
+      );
+      setEditingController(null);
+      setEditingName('');
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'No se pudo cambiar el nombre',
+      );
+    } finally {
+      setSavingName(false);
+    }
+  }, [editingController, editingName, savingName, session?.token]);
 
   return (
     <AppLayout navigation={navigation} onLogout={onLogout} session={session}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.heroCard}>
           <Text style={styles.eyebrow}>Presentación</Text>
-          <Text style={styles.title}>Control remoto de setpoint</Text>
 
           <View style={styles.headerRow}>
-            <View>
-              <Text style={styles.subtitle}>Controladores</Text>
-            </View>
+            <Text style={styles.subtitle}>Controladores</Text>
 
             <View style={styles.headerActions}>
               {session?.user?.role !== 'admin' && canWrite && (
@@ -229,7 +301,9 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
                 <Text style={styles.cardTitle}>{ctrl.name}</Text>
                 <Text style={styles.cardBadge}>
                   {ctrl.deviceBrand || ctrl.deviceModel || ctrl.dixellModel
-                    ? [ctrl.deviceBrand, ctrl.deviceModel || ctrl.dixellModel].filter(Boolean).join(' · ')
+                    ? [ctrl.deviceBrand, ctrl.deviceModel || ctrl.dixellModel]
+                        .filter(Boolean)
+                        .join(' · ')
                     : 'SIN MODELO'}
                 </Text>
                 {(() => {
@@ -257,7 +331,9 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
                           {runtimeStatus.label}
                         </Text>
                       </View>
-                      <Text style={styles.runtimeDetail}>{runtimeStatus.detail}</Text>
+                      <Text style={styles.runtimeDetail}>
+                        {runtimeStatus.detail}
+                      </Text>
                     </>
                   );
                 })()}
@@ -269,21 +345,81 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
             </TouchableOpacity>
 
             {canWrite && (
-              <TouchableOpacity
-                style={[styles.deleteBadge, deletingId === ctrl._id && styles.deleteBadgeDisabled]}
-                onPress={() => handleDeleteController(ctrl)}
-                disabled={deletingId === ctrl._id}
-              >
-                {deletingId === ctrl._id ? (
-                  <ActivityIndicator size="small" color="#991B1B" />
-                ) : (
-                  <Trash2 color="#991B1B" strokeWidth={2} size={18} />
-                )}
-              </TouchableOpacity>
+              <>
+                <View style={styles.headerDeleteEdit}>
+                  <TouchableOpacity
+                    style={styles.editBadge}
+                    onPress={() => handleEditController(ctrl)}
+                  >
+                    <PencilLine color="#1D4ED8" strokeWidth={2} size={18} />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.deleteBadge,
+                      deletingId === ctrl._id && styles.deleteBadgeDisabled,
+                    ]}
+                    onPress={() => handleDeleteController(ctrl)}
+                    disabled={deletingId === ctrl._id}
+                  >
+                    {deletingId === ctrl._id ? (
+                      <ActivityIndicator size="small" color="#991B1B" />
+                    ) : (
+                      <Trash2 color="#991B1B" strokeWidth={2} size={18} />
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
             )}
           </View>
         ))}
       </ScrollView>
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={Boolean(editingController)}
+        onRequestClose={handleCloseEditName}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalEyebrow}>Editar controlador</Text>
+            <Text style={styles.modalTitle}>Nombre visible</Text>
+            <TextInput
+              style={styles.nameInput}
+              value={editingName}
+              onChangeText={setEditingName}
+              placeholder="Nombre del controlador"
+              placeholderTextColor="#94A3B8"
+              autoCapitalize="sentences"
+              maxLength={150}
+              editable={!savingName}
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={handleCloseEditName}
+                disabled={savingName}
+              >
+                <Text style={styles.secondaryButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={handleSaveControllerName}
+                disabled={savingName}
+              >
+                {savingName ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.saveButtonText}>Guardar</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </AppLayout>
   );
 }
@@ -296,7 +432,7 @@ const styles = StyleSheet.create({
   },
   heroCard: {
     backgroundColor: '#0F172A',
-    borderRadius: 28,
+    borderRadius: 10,
     paddingHorizontal: 20,
     paddingVertical: 22,
     marginBottom: 18,
@@ -308,12 +444,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
-  title: {
-    fontSize: 26,
-    fontWeight: '900',
-    color: '#F8FAFC',
-    marginTop: 8,
-  },
+
   subtitle: {
     fontSize: 21,
     fontWeight: '800',
@@ -323,11 +454,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 18,
+    marginTop: 10,
   },
   headerActions: {
     flexDirection: 'row',
     gap: 8,
+  },
+  headerDeleteEdit: {
+    position: 'absolute',
+    top: 6,
+    right: 16,
+    flexDirection: 'row',
   },
   adminCta: {
     backgroundColor: '#E0F2FE',
@@ -419,11 +556,18 @@ const styles = StyleSheet.create({
   arrowBadge: {
     width: 38,
     height: 38,
-    borderRadius: 12,
-    backgroundColor: '#E2E8F0',
+
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 12,
+  },
+  editBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
   },
   deleteBadge: {
     width: 38,
@@ -461,6 +605,72 @@ const styles = StyleSheet.create({
   errorText: {
     color: '#B00020',
     marginBottom: 12,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.42)',
+    justifyContent: 'center',
+    paddingHorizontal: 22,
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#D6E3F3',
+  },
+  modalEyebrow: {
+    color: '#1D4ED8',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  modalTitle: {
+    color: '#0F172A',
+    fontSize: 20,
+    fontWeight: '900',
+    marginBottom: 14,
+  },
+  nameInput: {
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: '#0F172A',
+    fontSize: 16,
+    fontWeight: '700',
+    backgroundColor: '#F8FAFC',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 18,
+  },
+  secondaryButton: {
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    backgroundColor: '#E2E8F0',
+  },
+  secondaryButtonText: {
+    color: '#0F172A',
+    fontWeight: '800',
+  },
+  saveButton: {
+    minWidth: 96,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    alignItems: 'center',
+    backgroundColor: '#0F172A',
+  },
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
   },
 });
 

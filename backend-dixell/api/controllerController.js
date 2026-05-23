@@ -654,6 +654,37 @@ export const deleteController = async (req, res) => {
   }
 };
 
+export const updateControllerName = async (req, res) => {
+  try {
+    if (!ensureControllerMutationRole(req, res)) return;
+
+    const controller = await findOwnedController(req.params.id, req.user?.id);
+    if (!controller) {
+      return res.status(404).json({ error: "Controlador no encontrado" });
+    }
+
+    const name = String(req.body?.name ?? "").trim();
+    if (!name) {
+      return res.status(400).json({ error: "Nombre inválido" });
+    }
+
+    controller.name = name;
+    await controller.save();
+    invalidateDiagnosticCache(controller._id);
+    emitControllerRefresh(controller._id, "controller-name-updated");
+
+    return res.json({
+      controller: {
+        _id: controller._id.toString(),
+        name: controller.name,
+      },
+    });
+  } catch (error) {
+    console.error("❌ [UPDATE CONTROLLER NAME ERROR]:", error?.message || error);
+    return res.status(500).json({ error: "Error cambiando nombre del controlador" });
+  }
+};
+
 export const getController = async (req, res) => {
   try {
     const controller = await findOwnedController(req.params.id, req.user?.id).lean();
@@ -1228,6 +1259,14 @@ export const updateControllerConnectionConfig = async (req, res) => {
     }
     touchControllerPolling(controller._id);
 
+    if (req.body?.name != null) {
+      const name = String(req.body.name).trim();
+      if (!name) {
+        return res.status(400).json({ error: "Nombre inválido" });
+      }
+      controller.name = name;
+    }
+
     if (req.body?.ipAddress != null) {
       const ipAddress = String(req.body.ipAddress).trim();
       if (!ipAddress && requiresLocalIp(controller.gatewayMode)) {
@@ -1285,6 +1324,7 @@ export const updateControllerConnectionConfig = async (req, res) => {
     emitControllerRefresh(controller._id, "connection-config-updated");
 
     return res.json({
+      name: controller.name,
       gatewayMode: controller.gatewayMode,
       ipAddress: controller.ipAddress,
       modbusPort: controller.modbusPort,

@@ -307,6 +307,14 @@ export function deleteController(controllerId: string, authToken: string) {
   });
 }
 
+export function updateControllerName(controllerId: string, name: string, authToken: string) {
+  return request<{ controller: any }>(`/api/controllers/${controllerId}/name`, {
+    method: "PUT",
+    body: { name },
+    authToken,
+  });
+}
+
 export function fetchControllers(authToken: string) {
   return request<{ controllers: any[] }>("/api/controllers", { method: "GET", authToken });
 }
@@ -467,6 +475,7 @@ export function updateControllerSetpointConfig(
 export function updateControllerConnectionConfig(
   controllerId: string,
   payload: {
+    name?: string;
     ipAddress?: string;
     modbusPort?: number;
     unitId?: number;
