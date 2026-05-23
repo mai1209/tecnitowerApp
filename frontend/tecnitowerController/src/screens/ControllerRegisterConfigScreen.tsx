@@ -86,6 +86,19 @@ function buildPayloadDefinitions(definitions: any[]) {
     .filter(Boolean);
 }
 
+function hasAnyDefinitionValue(definition: any) {
+  return [
+    definition.key,
+    definition.label,
+    definition.register,
+    definition.verifyRegister,
+    definition.scale,
+    definition.min,
+    definition.max,
+    definition.description,
+  ].some((value) => String(value ?? "").trim().length > 0);
+}
+
 function getFunctionCodeLabel(value: "auto" | "0x06" | "0x10") {
   if (value === "0x06") return "0x06 · Escritura simple";
   if (value === "0x10") return "0x10 · Escritura múltiple";
@@ -299,6 +312,42 @@ function ControllerRegisterConfigScreen({ route, navigation, session }: any) {
     ) {
       Alert.alert("Error", "El tiempo sin comunicación debe ser al menos 1 minuto");
       return;
+    }
+
+    for (const [index, definition] of definitions.entries()) {
+      if (!hasAnyDefinitionValue(definition)) continue;
+
+      const rowLabel = `Parámetro ${index + 1}`;
+      const register = parseOptionalNumber(definition.register);
+      const scale = parseOptionalNumber(definition.scale);
+      const verifyRegister = parseOptionalNumber(definition.verifyRegister);
+      const min = parseOptionalNumber(definition.min);
+      const max = parseOptionalNumber(definition.max);
+
+      if (!definition.key.trim() || !definition.label.trim() || register == null) {
+        Alert.alert("Error", `${rowLabel}: Label, key y register son obligatorios`);
+        return;
+      }
+      if (definition.scale.trim() && (scale == null || scale < 1)) {
+        Alert.alert("Error", `${rowLabel}: Scale debe ser un número mayor o igual a 1`);
+        return;
+      }
+      if (definition.verifyRegister.trim() && (verifyRegister == null || verifyRegister < 0)) {
+        Alert.alert("Error", `${rowLabel}: Verify register inválido`);
+        return;
+      }
+      if (definition.min.trim() && min == null) {
+        Alert.alert("Error", `${rowLabel}: Min inválido`);
+        return;
+      }
+      if (definition.max.trim() && max == null) {
+        Alert.alert("Error", `${rowLabel}: Max inválido`);
+        return;
+      }
+      if (min != null && max != null && min > max) {
+        Alert.alert("Error", `${rowLabel}: Min no puede ser mayor que Max`);
+        return;
+      }
     }
 
     const payloadDefinitions = buildPayloadDefinitions(definitions);

@@ -62,6 +62,19 @@ function parseOptionalNumber(value: string) {
   return Number.isFinite(numeric) ? numeric : undefined;
 }
 
+function hasAnyRegisterValue(definition: any) {
+  return [
+    definition.key,
+    definition.label,
+    definition.register,
+    definition.verifyRegister,
+    definition.scale,
+    definition.min,
+    definition.max,
+    definition.description,
+  ].some((value) => String(value ?? "").trim().length > 0);
+}
+
 export default function DeviceModelFormScreen({ navigation, route, session, onLogout }: any) {
   const editingModel = route?.params?.model ?? null;
   const focusRegisters = Boolean(route?.params?.focusRegisters);
@@ -153,6 +166,42 @@ export default function DeviceModelFormScreen({ navigation, route, session, onLo
     if (!form.name.trim()) {
       Alert.alert("Error", "El nombre del modelo es obligatorio.");
       return;
+    }
+
+    for (const [index, definition] of form.registerTemplates.entries()) {
+      if (!hasAnyRegisterValue(definition)) continue;
+
+      const rowLabel = `Registro ${index + 1}`;
+      const register = parseOptionalNumber(definition.register);
+      const scale = parseOptionalNumber(definition.scale);
+      const verifyRegister = parseOptionalNumber(definition.verifyRegister);
+      const min = parseOptionalNumber(definition.min);
+      const max = parseOptionalNumber(definition.max);
+
+      if (!definition.key.trim() || !definition.label.trim() || register == null) {
+        Alert.alert("Error", `${rowLabel}: Key, label y register son obligatorios.`);
+        return;
+      }
+      if (definition.scale.trim() && (scale == null || scale < 1)) {
+        Alert.alert("Error", `${rowLabel}: Scale debe ser un número mayor o igual a 1.`);
+        return;
+      }
+      if (definition.verifyRegister.trim() && (verifyRegister == null || verifyRegister < 0)) {
+        Alert.alert("Error", `${rowLabel}: Verify register inválido.`);
+        return;
+      }
+      if (definition.min.trim() && min == null) {
+        Alert.alert("Error", `${rowLabel}: Min inválido.`);
+        return;
+      }
+      if (definition.max.trim() && max == null) {
+        Alert.alert("Error", `${rowLabel}: Max inválido.`);
+        return;
+      }
+      if (min != null && max != null && min > max) {
+        Alert.alert("Error", `${rowLabel}: Min no puede ser mayor que Max.`);
+        return;
+      }
     }
 
     const registerTemplates = form.registerTemplates

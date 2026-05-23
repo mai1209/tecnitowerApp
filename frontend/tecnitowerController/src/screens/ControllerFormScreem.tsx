@@ -111,10 +111,24 @@ function ControllerFormScreen({ navigation, route, session }: Props) {
   };
 
   const handleSubmit = async () => {
-    if (!name || !elfinId) {
-      setError('Por favor, completa todos los campos obligatorios.');
+    const trimmedName = name.trim();
+    const trimmedElfinId = elfinId.trim().toUpperCase();
+    const trimmedDeviceModel = deviceModel.trim().toUpperCase();
+    const trimmedDeviceBrand = deviceBrand.trim().toUpperCase();
+
+    if (!trimmedName) {
+      setError('Falta la identificación del controlador.');
       return;
     }
+    if (!trimmedDeviceModel) {
+      setError('Falta seleccionar el modelo de hardware.');
+      return;
+    }
+    if (!trimmedElfinId) {
+      setError('Falta el ID Elfin del controlador.');
+      return;
+    }
+
     const parsedUnitId = parseOptionalNumber(unitId);
     const parsedBaudRate = parseOptionalNumber(baudRate);
     const parsedProbe1 = parseOptionalNumber(probe1);
@@ -166,14 +180,14 @@ function ControllerFormScreen({ navigation, route, session }: Props) {
 
     try {
       const payload = {
-        name,
+        name: trimmedName,
         gatewayMode,
-        deviceBrand: deviceBrand.trim().toUpperCase() || undefined,
-        deviceModel: deviceModel.trim().toUpperCase(),
+        deviceBrand: trimmedDeviceBrand || undefined,
+        deviceModel: trimmedDeviceModel,
         deviceModelId: selectedModelId ?? undefined,
-        dixellModel: deviceModel.trim().toUpperCase(),
+        dixellModel: trimmedDeviceModel,
         dixellModelId: selectedModelId ?? undefined,
-        elfinId: elfinId.trim().toUpperCase(),
+        elfinId: trimmedElfinId,
         ipAddress: ipAddress.trim() || undefined,
         unitId: parsedUnitId,
         baudRate: parsedBaudRate,

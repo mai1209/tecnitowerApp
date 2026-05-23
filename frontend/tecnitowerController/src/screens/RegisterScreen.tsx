@@ -39,7 +39,10 @@ function RegisterScreen({ navigation }: Props) {
   const handleRegister = async () => {
     if (isSubmitting) return;
 
-    if (!email || !fullName || !password || !confirmPassword) {
+    const normalizedEmail = email.trim().toLowerCase();
+    const trimmedFullName = fullName.trim();
+
+    if (!normalizedEmail || !trimmedFullName || !password || !confirmPassword) {
       setErrorMessage('Completa todos los campos para registrarte.');
       return;
     }
@@ -59,8 +62,8 @@ function RegisterScreen({ navigation }: Props) {
 
     try {
       await registerUser({
-        email,
-        fullName,
+        email: normalizedEmail,
+        fullName: trimmedFullName,
         password,
       });
 

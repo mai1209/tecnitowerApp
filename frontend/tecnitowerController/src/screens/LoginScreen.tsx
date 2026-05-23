@@ -38,7 +38,9 @@ function LoginScreen({ onLogin, navigation }: Props) {
   const handleLogin = async () => {
     if (isSubmitting) return;
 
-    if (!email || !password) {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail || !password) {
       setErrorMessage('Completa tu correo y contraseña.');
       return;
     }
@@ -47,7 +49,7 @@ function LoginScreen({ onLogin, navigation }: Props) {
     setErrorMessage('');
 
     try {
-      const response = await loginUser({ email, password });
+      const response = await loginUser({ email: normalizedEmail, password });
       const token = response?.token;
       const rawUser = response?.user;
 

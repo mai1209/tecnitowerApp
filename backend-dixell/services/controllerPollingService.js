@@ -13,6 +13,9 @@ const BACKGROUND_POLL_INTERVAL_MS = Number(
   process.env.CONTROLLER_BACKGROUND_POLL_INTERVAL_MS ?? 60000
 );
 const TCP_RECONNECT_CONFIRM_MS = Number(process.env.TCP_RECONNECT_CONFIRM_MS ?? 2500);
+const TCP_GATEWAY_OFFLINE_CONFIRM_MS = Number(
+  process.env.TCP_GATEWAY_OFFLINE_CONFIRM_MS ?? 15000
+);
 
 const activeControllers = new Map();
 let pollTimer = null;
@@ -45,14 +48,45 @@ function isModbusTimeoutError(error) {
     .includes("timeout esperando respuesta modbus del controlador");
 }
 
+function isTcpClientMissingError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return (
+    message.includes("elfin tcp client no conectado") ||
+    message.includes("elfin tcp client no listo") ||
+    message.includes("conexión tcp del elfin")
+  );
+}
+
+function getRecentElfinSeenAt(controller) {
+  const rawValue =
+    controller?.connectionState?.lastElfinSeenAt ??
+    controller?.connectionState?.lastSeenAt ??
+    controller?.lastTelemetry?.receivedAt;
+  const seenAt = rawValue ? new Date(rawValue).getTime() : NaN;
+  return Number.isFinite(seenAt) ? seenAt : null;
+}
+
 async function resolveTcpClientPollingError(controller, error) {
-  if (!isModbusTimeoutError(error)) return error;
+  if (!isModbusTimeoutError(error) && !isTcpClientMissingError(error)) return error;
 
   const waitMs = isFinitePositive(TCP_RECONNECT_CONFIRM_MS) ? TCP_RECONNECT_CONFIRM_MS : 2500;
   await new Promise((resolve) => setTimeout(resolve, waitMs));
 
   const connectionInfo = getTcpGatewayConnectionInfo(controller?.elfinId);
-  if (connectionInfo) return error;
+  if (connectionInfo || isModbusTimeoutError(error)) {
+    return new Error(`Timeout esperando respuesta Modbus del controlador (${controller?.elfinId})`);
+  }
+
+  const lastElfinSeenAt = getRecentElfinSeenAt(controller);
+  const offlineConfirmMs = isFinitePositive(TCP_GATEWAY_OFFLINE_CONFIRM_MS)
+    ? TCP_GATEWAY_OFFLINE_CONFIRM_MS
+    : 15000;
+  const recentlyHadGateway =
+    lastElfinSeenAt !== null && Date.now() - lastElfinSeenAt <= offlineConfirmMs;
+
+  if (recentlyHadGateway && controller?.connectionState?.status === "modbus_offline") {
+    return new Error(`Timeout esperando respuesta Modbus del controlador (${controller?.elfinId})`);
+  }
 
   return new Error(`Elfin TCP Client no conectado (${controller?.elfinId})`);
 }
@@ -212,7 +246,7 @@ async function updateControllerPollingErrorState(controller, error) {
     Boolean(controller?.alertState?.active) !== Boolean(runtimeState?.alertState?.active) ||
     String(controller?.alertState?.type ?? "") !== String(runtimeState?.alertState?.type ?? "")
   ) {
-        await notifyControllerAlertTransition({
+    await notifyControllerAlertTransition({
       controller,
       previousAlertState: controller?.alertState ?? null,
       nextAlertState: runtimeState?.alertState ?? null,
