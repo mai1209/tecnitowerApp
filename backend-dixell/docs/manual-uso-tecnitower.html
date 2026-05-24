@@ -382,65 +382,6 @@
       </section>
 
       <section>
-        <h2>6. Servicios cloud utilizados</h2>
-        <table>
-          <tr><th>Servicio</th><th>Uso</th></tr>
-          <tr>
-            <td>Oracle Cloud</td>
-            <td>Servidor backend principal, API de la app y gateway TCP para recibir al Elfin.</td>
-          </tr>
-          <tr>
-            <td>MongoDB Atlas</td>
-            <td>Base de datos de usuarios, controladores, configuraciones, lecturas y estados.</td>
-          </tr>
-          <tr>
-            <td>EMQX Cloud / MQTT</td>
-            <td>Broker de mensajeria para eventos, integraciones y alertas. No requiere Mosquitto local.</td>
-          </tr>
-        </table>
-      </section>
-
-      <section class="page-break">
-        <h2>7. Validacion rapida</h2>
-        <ul class="checklist">
-          <li>El backend responde desde internet.</li>
-          <li>El Elfin queda en estado <code>Connected</code>.</li>
-          <li>La app permite iniciar sesion.</li>
-          <li>El controlador aparece en la app.</li>
-          <li>La pantalla del controlador muestra temperatura.</li>
-          <li>El cambio de setpoint se refleja en el controlador fisico.</li>
-          <li>El estado online/offline cambia correctamente.</li>
-        </ul>
-      </section>
-
-      <section>
-        <h2>8. Problemas frecuentes</h2>
-        <table>
-          <tr><th>Problema</th><th>Que revisar</th></tr>
-          <tr>
-            <td>No inicia sesion</td>
-            <td>Conexion a internet del celular y disponibilidad del backend en Oracle.</td>
-          </tr>
-          <tr>
-            <td>El controlador figura offline</td>
-            <td>WiFi del local, estado del Elfin, Register Code y puerto 4001.</td>
-          </tr>
-          <tr>
-            <td>No lee temperatura</td>
-            <td>Unit ID, baud rate, protocolo Modbus, A+/B- RS485 y registros configurados.</td>
-          </tr>
-          <tr>
-            <td>El setpoint cambia lento</td>
-            <td>Es esperable que tarde varios segundos porque la orden viaja app -> nube -> Elfin -> controlador.</td>
-          </tr>
-          <tr>
-            <td>El Elfin no aparece en la red local</td>
-            <td>Verificar que este conectado al WiFi correcto o resetearlo y repetir configuracion.</td>
-          </tr>
-        </table>
-      </section>
-
-      <section>
         <h2>9. Reglas importantes</h2>
         <ul>
           <li>No repetir el mismo <code>elfinId</code> en dos instalaciones distintas.</li>
