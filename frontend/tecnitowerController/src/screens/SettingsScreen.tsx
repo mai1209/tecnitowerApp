@@ -136,7 +136,7 @@ export default function SettingsScreen({ navigation, session }: Props) {
 
   const openSection = (key: SettingsSectionKey | "passwordRecovery") => {
     if (key === "passwordRecovery") {
-      navigation?.navigate?.("PasswordRecovery");
+      navigation?.navigate?.("PasswordRecovery", { returnTo: "settings" });
       return;
     }
     navigation?.navigate?.("SettingsSection", { section: key });
