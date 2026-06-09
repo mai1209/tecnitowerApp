@@ -50,9 +50,16 @@ function mergeControllerRegisterDefinitions(existingDefinitions = [], templateDe
     usedKeys.add(template.key);
 
     if (current) {
+      // "El modelo manda en lo técnico": el template del modelo define los campos
+      // técnicos (register, functionCode, dataType, writable) y el controlador
+      // conserva su presentación/personalización (label, visible, accessLevel,
+      // scale, min, max, step, description, etc.).
       merged.push({
-        ...template,
         ...current,
+        register: template.register,
+        functionCode: template.functionCode,
+        dataType: template.dataType,
+        writable: template.writable,
         key: current.key,
       });
       continue;
