@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import { fileURLToPath } from "node:url";
 
 import { connectMongo, disconnectMongo } from "./database/connectMongo.js";
@@ -22,7 +23,42 @@ import {
 } from "./services/controllerRealtimeService.js";
 
 const app = express();
-app.use(cors());
+
+// Detrás de un proxy (Render, Nginx, etc.): confiar en el primer salto para
+// que req.ip sea la IP real del cliente (necesario para que el rate-limit
+// cuente por usuario y no a todos juntos). Ajustar el número si hay más proxies.
+app.set("trust proxy", 1);
+
+// Headers de seguridad (CSP, X-Frame-Options, etc.). crossOriginResourcePolicy
+// en "cross-origin" para no bloquear el consumo de la API desde otros orígenes.
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+
+// CORS: si definís CORS_ORIGINS (lista separada por comas) se restringe a esos
+// orígenes. Si no, queda abierto (con aviso) para no romper nada en producción.
+const allowedOrigins = (process.env.CORS_ORIGINS ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+if (allowedOrigins.length > 0) {
+  app.use(
+    cors({
+      origin(origin, callback) {
+        // Permitir requests sin Origin (apps móviles / curl / server-to-server)
+        if (!origin || allowedOrigins.includes(origin)) {
+          return callback(null, true);
+        }
+        return callback(new Error(`Origen no permitido por CORS: ${origin}`));
+      },
+    })
+  );
+} else {
+  console.warn(
+    "⚠️  CORS abierto a todos los orígenes. Definí CORS_ORIGINS (separado por comas) para restringir."
+  );
+  app.use(cors());
+}
+
 app.use(express.json());
 
 const PORT = Number(process.env.PORT ?? 3001);

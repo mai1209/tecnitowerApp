@@ -4,8 +4,12 @@ import * as controllerController from "../api/controllerController.js";
 
 const router = express.Router();
 
-router.get("/setpoint", controllerController.getSetpoint);
+// A partir de acá, TODAS las rutas requieren autenticación.
 router.use(requireAuth);
+
+// Movido detrás de requireAuth: antes quedaba expuesto sin login y disparaba
+// una lectura Modbus. Si es un endpoint legacy y nadie lo usa, conviene borrarlo.
+router.get("/setpoint", controllerController.getSetpoint);
 
 router.post("/", controllerController.createController);
 router.get("/", controllerController.listControllers);

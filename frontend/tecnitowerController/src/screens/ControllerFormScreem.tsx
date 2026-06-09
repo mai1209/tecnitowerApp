@@ -292,7 +292,7 @@ function ControllerFormScreen({ navigation, route, session }: Props) {
                 icon={<Hash size={16} color="#64748B" />}
                 value={elfinId}
                 onChangeText={setElfinId}
-                placeholder="ELF-XXXXXXX"
+                placeholder="ELFIN:XXXXXXX"
               />
 
               <InputField

@@ -307,6 +307,15 @@ export function deleteController(controllerId: string, authToken: string) {
   });
 }
 
+// Borra UN controlador puntual como admin (sin borrar al usuario).
+export function deleteAdminController(controllerId: string, authToken: string) {
+  return request<{ message: string; controller: any }>(`/api/admin/controllers/${controllerId}`, {
+    method: "DELETE",
+    authToken,
+    timeoutMs: 15000,
+  });
+}
+
 export function updateControllerName(controllerId: string, name: string, authToken: string) {
   return request<{ controller: any }>(`/api/controllers/${controllerId}/name`, {
     method: "PUT",

@@ -11,9 +11,14 @@ import {
   View,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import { AlertTriangle, BellRing, Settings2, UserRound } from "lucide-react-native";
+import { AlertTriangle, BellRing, Settings2, Trash2, UserRound } from "lucide-react-native";
 import AppLayout from "../layouts/AppLayout";
-import { fetchAdminUsers, sendAdminUserTestPush, updateAdminUser } from "../services/api";
+import {
+  deleteAdminController,
+  fetchAdminUsers,
+  sendAdminUserTestPush,
+  updateAdminUser,
+} from "../services/api";
 
 function controllerStatus(controller: any) {
   if (controller?.alertState?.active) {
@@ -88,6 +93,7 @@ export default function AdminUserControllersScreen({ navigation, route, session,
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [testingPush, setTestingPush] = useState(false);
+  const [deletingId, setDeletingId] = useState("");
   const activeAlerts = (user?.controllers ?? []).filter((controller: any) => controller?.alertState?.active);
 
   useFocusEffect(
@@ -116,6 +122,39 @@ export default function AdminUserControllersScreen({ navigation, route, session,
         active = false;
       };
     }, [session.token, targetUserId])
+  );
+
+  const handleDeleteController = useCallback(
+    (controller: any) => {
+      Alert.alert(
+        "Borrar controlador",
+        `¿Seguro que querés borrar "${controller?.name ?? "este controlador"}"? Esta acción no se puede deshacer.`,
+        [
+          { text: "Cancelar", style: "cancel" },
+          {
+            text: "Borrar",
+            style: "destructive",
+            onPress: async () => {
+              setDeletingId(String(controller._id));
+              try {
+                await deleteAdminController(String(controller._id), session.token);
+                const response = await fetchAdminUsers(session.token);
+                const found = (response.users ?? []).find(
+                  (item: any) => String(item._id) === targetUserId
+                );
+                setUser(found ?? null);
+                Alert.alert("OK", "Controlador borrado");
+              } catch (err: any) {
+                Alert.alert("Error", err?.message || "No se pudo borrar el controlador");
+              } finally {
+                setDeletingId("");
+              }
+            },
+          },
+        ]
+      );
+    },
+    [session.token, targetUserId]
   );
 
   return (
@@ -269,6 +308,20 @@ export default function AdminUserControllersScreen({ navigation, route, session,
               >
                 <Settings2 color="#FFFFFF" size={17} strokeWidth={2.2} />
                 <Text style={styles.configButtonText}>Entrar al panel del controlador</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.deleteButton,
+                  deletingId === String(controller._id) && styles.deleteButtonDisabled,
+                ]}
+                disabled={deletingId === String(controller._id)}
+                onPress={() => handleDeleteController(controller)}
+              >
+                <Trash2 color="#B91C1C" size={16} strokeWidth={2.2} />
+                <Text style={styles.deleteButtonText}>
+                  {deletingId === String(controller._id) ? "Borrando..." : "Borrar controlador"}
+                </Text>
               </TouchableOpacity>
             </View>
           );
@@ -668,6 +721,26 @@ const styles = StyleSheet.create({
   },
   configButtonText: {
     color: "#FFFFFF",
+    fontWeight: "900",
+    fontSize: 13,
+  },
+  deleteButton: {
+    marginTop: 10,
+    borderRadius: 14,
+    paddingVertical: 11,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    backgroundColor: "#FEF2F2",
+  },
+  deleteButtonDisabled: {
+    opacity: 0.6,
+  },
+  deleteButtonText: {
+    color: "#B91C1C",
     fontWeight: "900",
     fontSize: 13,
   },
