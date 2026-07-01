@@ -192,6 +192,33 @@ export async function updateAdminControllerRegisters(
   });
 }
 
+export type DiagnosticParam = {
+  key: string;
+  label?: string;
+  register?: number;
+  value?: number | string | null;
+  step?: number;
+  writable?: boolean;
+  visible?: boolean;
+  accessLevel?: "user" | "technician";
+  description?: string;
+};
+
+export type DiagnosticResponse = {
+  probe1Value?: number | null;
+  setpointValue?: number | null;
+  setpointRegister?: number | null;
+  online?: boolean;
+  userCanWrite?: boolean;
+  connectionState?: { elfinOnline?: boolean; modbusOnline?: boolean; lastPollError?: string } | null;
+  alertState?: { active?: boolean; type?: string; message?: string } | null;
+  configuredRegisters?: DiagnosticParam[];
+};
+
+export async function fetchControllerDiagnostic(token: string, controllerId: string) {
+  return request<DiagnosticResponse>(`/api/controllers/${controllerId}/diagnostic`, { token });
+}
+
 export async function fetchDeviceModels(token: string) {
   return request<{ models: DeviceModel[] }>("/api/device-models", { token });
 }

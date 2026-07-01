@@ -16,6 +16,7 @@ import {
   type ModelPayload,
   type Session,
 } from "./lib/api";
+import LiveMonitor from "./components/LiveMonitor";
 import { downloadCsv, parseRegisterDefinitionsCsv, serializeRegisterDefinitionsCsv } from "./lib/csv";
 import { formatDate, formatNumber } from "./lib/format";
 import type {
@@ -26,8 +27,9 @@ import type {
   UserRole,
 } from "./types";
 
-type View = "overview" | "users" | "models";
-type ControllerSection = "hub" | "base" | "alerts" | "parameter-new" | "definitions";
+type View = "overview" | "fleet" | "users" | "models";
+type FleetFilter = "all" | "online" | "offline" | "alerts";
+type ControllerSection = "hub" | "monitor" | "base" | "alerts" | "parameter-new" | "definitions";
 
 const STORAGE_KEY = "tecnitower-admin-web-session";
 
@@ -151,7 +153,7 @@ function getFunctionCodeHelp(value: RegisterDefinition["functionCode"]) {
   return "Prueba 0x10 y, si falla, hace fallback a 0x06.";
 }
 
-function getControllerStatusSummary(controller: AdminControllerDetail) {
+function getControllerStatusSummary(controller: UserWithControllers["controllers"][number]) {
   if (controller.alertState?.active) {
     return {
       label: controller.alertState.type === "offline" ? "Offline" : "Alerta",
@@ -256,6 +258,36 @@ export default function App() {
   const [modelForm, setModelForm] = useState<ModelPayload>(emptyModelForm());
   const [editingModelId, setEditingModelId] = useState<string | null>(null);
   const [modelEditorOpen, setModelEditorOpen] = useState(false);
+  const [fleetSearch, setFleetSearch] = useState("");
+  const [fleetFilter, setFleetFilter] = useState<FleetFilter>("all");
+
+  const fleetRows = useMemo(() => {
+    const rows = users.flatMap((user) =>
+      (user.controllers ?? []).map((controller) => ({ controller, user }))
+    );
+    const term = fleetSearch.trim().toLowerCase();
+    return rows.filter(({ controller, user }) => {
+      const online = Boolean(controller.connectionState?.online);
+      const alerting = Boolean(controller.alertState?.active);
+      if (fleetFilter === "online" && !online) return false;
+      if (fleetFilter === "offline" && online) return false;
+      if (fleetFilter === "alerts" && !alerting) return false;
+      if (!term) return true;
+      const haystack = [
+        controller.name,
+        controller.elfinId,
+        controller.deviceModel,
+        controller.dixellModel,
+        controller.location,
+        user.fullName,
+        user.email,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(term);
+    });
+  }, [users, fleetSearch, fleetFilter]);
 
   const controllerMetrics = useMemo(() => {
     const controllers = users.flatMap((user) => user.controllers);
@@ -264,6 +296,18 @@ export default function App() {
       controllers: controllers.length,
       online: controllers.filter((controller) => controller.connectionState?.online).length,
       alerts: controllers.filter((controller) => controller.alertState?.active).length,
+    };
+  }, [users]);
+
+  const attention = useMemo(() => {
+    const rows = users.flatMap((user) =>
+      (user.controllers ?? []).map((controller) => ({ controller, user }))
+    );
+    return {
+      alerts: rows.filter(({ controller }) => controller.alertState?.active),
+      offline: rows.filter(
+        ({ controller }) => !controller.connectionState?.online && !controller.alertState?.active
+      ),
     };
   }, [users]);
 
@@ -277,6 +321,12 @@ export default function App() {
       return {
         title: `Usuario: ${selectedUser.fullName}`,
         subtitle: "Controladores del usuario, datos generales y acceso al panel técnico.",
+      };
+    }
+    if (view === "fleet") {
+      return {
+        title: "Equipos",
+        subtitle: "Todos los controladores de todos los usuarios en un solo lugar, con estado y búsqueda.",
       };
     }
     if (view === "models") {
@@ -355,12 +405,17 @@ export default function App() {
     }
   }
 
-  async function handleOpenController(controllerId: string) {
+  async function handleOpenController(
+    controllerId: string,
+    ownerId?: string,
+    section: ControllerSection = "hub"
+  ) {
     if (!session?.token) return;
     try {
       const payload = await fetchAdminController(session.token, controllerId);
+      if (ownerId) setSelectedUserId(ownerId);
       setSelectedController(payload.controller);
-      setSelectedControllerSection("hub");
+      setSelectedControllerSection(section);
       setError("");
     } catch (err) {
       setError((err as Error).message);
@@ -557,6 +612,7 @@ export default function App() {
         </div>
         <nav className="nav">
           <button className={view === "overview" ? "nav-link active" : "nav-link"} onClick={() => setView("overview")}>Resumen</button>
+          <button className={view === "fleet" ? "nav-link active" : "nav-link"} onClick={() => setView("fleet")}>Equipos</button>
           <button
             className={view === "users" ? "nav-link active" : "nav-link"}
             onClick={() => {
@@ -598,11 +654,192 @@ export default function App() {
         {success ? <section className="banner success">{success}</section> : null}
 
         {view === "overview" ? (
-          <section className="metrics-grid">
-            <article className="metric-card"><span>Usuarios</span><strong>{controllerMetrics.users}</strong></article>
-            <article className="metric-card"><span>Controladores</span><strong>{controllerMetrics.controllers}</strong></article>
-            <article className="metric-card"><span>Online</span><strong>{controllerMetrics.online}</strong></article>
-            <article className="metric-card"><span>Alertas activas</span><strong>{controllerMetrics.alerts}</strong></article>
+          <section className="stack">
+            <section className="metrics-grid">
+              <button className="metric-card clickable" onClick={() => setView("users")}>
+                <span>Usuarios</span>
+                <strong>{controllerMetrics.users}</strong>
+              </button>
+              <button
+                className="metric-card clickable"
+                onClick={() => {
+                  setFleetFilter("all");
+                  setView("fleet");
+                }}
+              >
+                <span>Controladores</span>
+                <strong>{controllerMetrics.controllers}</strong>
+              </button>
+              <button
+                className="metric-card clickable"
+                onClick={() => {
+                  setFleetFilter("online");
+                  setView("fleet");
+                }}
+              >
+                <span>Online</span>
+                <strong className="metric-ok">{controllerMetrics.online}</strong>
+              </button>
+              <button
+                className="metric-card clickable"
+                onClick={() => {
+                  setFleetFilter("alerts");
+                  setView("fleet");
+                }}
+              >
+                <span>Alertas activas</span>
+                <strong className={controllerMetrics.alerts > 0 ? "metric-danger" : ""}>
+                  {controllerMetrics.alerts}
+                </strong>
+              </button>
+            </section>
+
+            <div className="dashboard-grid">
+              <section className="panel">
+                <div className="panel-head">
+                  <h4>Alertas activas</h4>
+                  {attention.alerts.length > 0 ? (
+                    <button className="ghost-button small" onClick={() => { setFleetFilter("alerts"); setView("fleet"); }}>
+                      Ver todas
+                    </button>
+                  ) : null}
+                </div>
+                {attention.alerts.length === 0 ? (
+                  <p className="muted small">Sin alertas activas. Todo en orden. ✅</p>
+                ) : (
+                  <ul className="attention-list">
+                    {attention.alerts.slice(0, 8).map(({ controller, user }) => (
+                      <li key={controller._id} className="attention-item is-alert">
+                        <div>
+                          <strong>{controller.name}</strong>
+                          <small className="muted">
+                            {user.fullName || user.email} · {controller.alertState?.message || "Alerta activa"}
+                          </small>
+                        </div>
+                        <button className="ghost-button small" onClick={() => handleOpenController(controller._id, user._id, "monitor")}>
+                          Ver
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
+              <section className="panel">
+                <div className="panel-head">
+                  <h4>Equipos offline</h4>
+                  {attention.offline.length > 0 ? (
+                    <button className="ghost-button small" onClick={() => { setFleetFilter("offline"); setView("fleet"); }}>
+                      Ver todos
+                    </button>
+                  ) : null}
+                </div>
+                {attention.offline.length === 0 ? (
+                  <p className="muted small">Todos los equipos están online. ✅</p>
+                ) : (
+                  <ul className="attention-list">
+                    {attention.offline.slice(0, 8).map(({ controller, user }) => (
+                      <li key={controller._id} className="attention-item is-offline">
+                        <div>
+                          <strong>{controller.name}</strong>
+                          <small className="muted">
+                            {user.fullName || user.email} · {controller.elfinId}
+                          </small>
+                        </div>
+                        <button className="ghost-button small" onClick={() => handleOpenController(controller._id, user._id, "monitor")}>
+                          Ver
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            </div>
+          </section>
+        ) : null}
+
+        {view === "fleet" ? (
+          <section className="stack">
+            <section className="panel">
+              <div className="fleet-toolbar">
+                <input
+                  className="fleet-search"
+                  placeholder="Buscar por equipo, Elfin ID, modelo o usuario…"
+                  value={fleetSearch}
+                  onChange={(event) => setFleetSearch(event.target.value)}
+                />
+                <div className="fleet-filters">
+                  {([
+                    ["all", "Todos"],
+                    ["online", "Online"],
+                    ["offline", "Offline"],
+                    ["alerts", "Con alerta"],
+                  ] as [FleetFilter, string][]).map(([key, label]) => (
+                    <button
+                      key={key}
+                      className={fleetFilter === key ? "chip active" : "chip"}
+                      onClick={() => setFleetFilter(key)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="muted small">
+                {fleetRows.length} equipo{fleetRows.length === 1 ? "" : "s"} · {controllerMetrics.online} online · {controllerMetrics.alerts} con alerta
+              </p>
+            </section>
+
+            {fleetRows.length === 0 ? (
+              <section className="panel">
+                <p className="muted">No hay equipos que coincidan con la búsqueda o el filtro.</p>
+              </section>
+            ) : (
+              <section className="panel fleet-table-panel">
+                <table className="fleet-table">
+                  <thead>
+                    <tr>
+                      <th>Equipo</th>
+                      <th>Usuario</th>
+                      <th>Modelo</th>
+                      <th>Estado</th>
+                      <th>Lectura</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fleetRows.map(({ controller, user }) => {
+                      const status = getControllerStatusSummary(controller);
+                      return (
+                        <tr key={controller._id}>
+                          <td>
+                            <strong>{controller.name}</strong>
+                            <small className="muted">{controller.elfinId}</small>
+                          </td>
+                          <td>
+                            <span>{user.fullName || "Sin nombre"}</span>
+                            <small className="muted">{user.email}</small>
+                          </td>
+                          <td>{controller.deviceModel || controller.dixellModel || "Sin modelo"}</td>
+                          <td>
+                            <span className={`status-inline ${status.className}`}>{status.label}</span>
+                          </td>
+                          <td className="muted small">{telemetrySummary(controller)}</td>
+                          <td>
+                            <button
+                              className="ghost-button"
+                              onClick={() => handleOpenController(controller._id, user._id, "monitor")}
+                            >
+                              Ver
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </section>
+            )}
           </section>
         ) : null}
 
@@ -895,6 +1132,10 @@ export default function App() {
                   </article>
                 </section>
 
+                <button className="section-card-button section-card-primary" onClick={() => setSelectedControllerSection("monitor")}>
+                  <span className="section-card-title">Monitoreo en vivo</span>
+                  <span className="section-card-text">Temperatura, setpoint y parámetros con sus valores actuales, en tiempo real (igual que la app).</span>
+                </button>
                 <button className="section-card-button" onClick={() => setSelectedControllerSection("base")}>
                   <span className="section-card-title">Configuración base del controlador</span>
                   <span className="section-card-text">Nombre, Elfin ID, transporte, IP, Unit ID, baudrate, probes y ubicación.</span>
@@ -912,6 +1153,10 @@ export default function App() {
                   <span className="section-card-text">Definir qué ve o modifica el cliente en la app.</span>
                 </button>
               </>
+            ) : null}
+
+            {selectedControllerSection === "monitor" ? (
+              <LiveMonitor controller={selectedController} token={session.token} />
             ) : null}
 
             {selectedControllerSection === "base" ? (
