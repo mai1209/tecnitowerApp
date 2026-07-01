@@ -318,6 +318,10 @@ export function startTcpGatewayServer() {
     });
   });
 
+  // Tope de conexiones simultáneas: evita agotar recursos si alguien abre muchos
+  // sockets al puerto del gateway. Node rechaza las conexiones que exceden el límite.
+  tcpServer.maxConnections = Number(process.env.TCP_GATEWAY_MAX_CONNECTIONS ?? 500);
+
   tcpServer.on("error", (err) => {
     console.error("[TCP GATEWAY] server error:", err?.message || err);
   });

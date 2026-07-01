@@ -69,12 +69,15 @@ export async function registerUser(req, res, next) {
 
     const passwordHash = await hashPassword(password);
 
+    // Auto-registro: la cuenta nace SIN permiso de escritura. Un admin habilita
+    // canWrite desde el panel cuando corresponde. Evita que cualquiera que se
+    // registre pueda escribir setpoints/registros en controladores.
     const userDoc = await UserModel.create({
       fullName,
       email,
       passwordHash,
       role: "user",
-      canWrite: true,
+      canWrite: false,
     });
 
     return res.status(201).json({

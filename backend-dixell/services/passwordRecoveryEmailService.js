@@ -61,6 +61,15 @@ export async function sendPasswordRecoveryCode({ email, code, expiresInMinutes }
 
   if (sent) return;
 
+  // Fallback cuando no hay RESEND_API_KEY configurada. En producción NO logueamos
+  // el código (es un segundo factor); solo avisamos que falta configurar el email.
+  if (process.env.NODE_ENV === "production") {
+    console.warn(
+      `[AUTH] No se pudo enviar el email de recuperación a ${email}: falta configurar RESEND_API_KEY/EMAIL_FROM.`
+    );
+    return;
+  }
+
   console.info(
     `[AUTH] Código de recuperación para ${email}: ${code} (vence en ${expiresInMinutes} min). ` +
       "Configurar RESEND_API_KEY/EMAIL_FROM para enviarlo por email."

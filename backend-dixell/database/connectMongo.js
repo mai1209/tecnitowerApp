@@ -9,6 +9,14 @@ let mongoReadyPromise;
 export async function connectMongo() {
   if (mongoReadyPromise) return mongoReadyPromise;
 
+  // En producción NO caemos al Mongo local por defecto: si falta MONGODB_URI
+  // arrancaríamos silenciosamente contra una base vacía (bug real que ya nos pasó).
+  if (process.env.NODE_ENV === "production" && !process.env.MONGODB_URI) {
+    throw new Error(
+      "Falta MONGODB_URI en producción. Configurala en el .env para no conectar a una base local vacía."
+    );
+  }
+
   const uri = process.env.MONGODB_URI ?? DEFAULT_URI;
   const dbName = process.env.MONGODB_DB_NAME ?? DEFAULT_DB_NAME;
   const timeout = Number(process.env.MONGODB_TIMEOUT_MS ?? DEFAULT_TIMEOUT);

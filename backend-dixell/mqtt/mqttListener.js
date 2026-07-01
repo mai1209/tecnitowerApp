@@ -9,12 +9,26 @@ export let mqttClient = null;
 const pendingCommands = new Map();
 const pendingRawCommands = new Map();
 
-export let isWritingModbus = false; 
-// Función para bloquear/desbloquear el flujo de telemetría
-export function setWritingStatus(status) {
-  isWritingModbus = status;
-  if (status) console.log("[MQTT] Tráfico pausado para escritura Modbus...");
-  else console.log("[MQTT] Tráfico reanudado.");
+// Set de elfinIds a los que se les está escribiendo AHORA. Mientras un equipo
+// está en escritura ignoramos SOLO su telemetría entrante (para liberar al Elfin),
+// sin frenar la del resto de los equipos.
+const writingElfins = new Set();
+
+// Pausa/reanuda la telemetría de un equipo puntual durante una escritura Modbus.
+export function setWritingStatus(elfinId, status) {
+  const id = String(elfinId ?? "").trim().toUpperCase();
+  if (!id) return;
+  if (status) {
+    writingElfins.add(id);
+    console.log(`[MQTT] Telemetría pausada para escritura Modbus (${id})...`);
+  } else {
+    writingElfins.delete(id);
+    console.log(`[MQTT] Telemetría reanudada (${id}).`);
+  }
+}
+
+export function isWritingElfin(elfinId) {
+  return writingElfins.has(String(elfinId ?? "").trim().toUpperCase());
 }
 
 function extractElfinId(topic = "") {
@@ -142,9 +156,9 @@ async function handleMessage(topic, messageBuffer) {
     return;
   }
 
-  // SI ESTAMOS ESCRIBIENDO, ignoramos solo telemetría entrante para liberar
-  // procesamiento del Elfin. Los ACK de comandos se atienden arriba.
-  if (isWritingModbus) return;
+  // Si estamos escribiendo a ESTE equipo, ignoramos su telemetría entrante para
+  // liberar el procesamiento del Elfin. Los ACK de comandos se atienden arriba.
+  if (isWritingElfin(elfinId)) return;
 
   try {
     const controller = await ControllerModel.findOne({ elfinId });

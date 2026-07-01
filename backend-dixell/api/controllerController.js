@@ -722,6 +722,7 @@ export const updateControllerRegisterDefinitions = async (req, res) => {
 };
 
 export const setControllerSetpoint = async (req, res) => {
+  let writingElfinId = null;
   try {
     if (!ensureControllerMutationRole(req, res)) return;
 
@@ -747,7 +748,8 @@ export const setControllerSetpoint = async (req, res) => {
       note: definition.description,
     });
 
-    setWritingStatus(true);
+    writingElfinId = controller.elfinId;
+    setWritingStatus(writingElfinId, true);
     await new Promise((resolve) => setTimeout(resolve, 400));
     const writeResult = await writeDefinitionValue({
       controller,
@@ -756,13 +758,13 @@ export const setControllerSetpoint = async (req, res) => {
     });
 
     publishReadCommands(controller, [definition.register, LEGACY_SETPOINT_REGISTER]);
-    setWritingStatus(false);
+    setWritingStatus(writingElfinId, false);
     invalidateDiagnosticCache(controller._id);
     emitControllerRefresh(controller._id, "setpoint-written");
 
     return res.json({ success: true, newSetpoint: temperature, modbus: writeResult });
   } catch (error) {
-    setWritingStatus(false);
+    setWritingStatus(writingElfinId, false);
     console.error("❌ [SETPOINT ERROR]:", error.message);
     return res.status(500).json({
       error: error?.message || "Error al escribir en el equipo.",
@@ -772,6 +774,7 @@ export const setControllerSetpoint = async (req, res) => {
 };
 
 export const writeControllerRegister = async (req, res) => {
+  let writingElfinId = null;
   try {
     if (!ensureControllerMutationRole(req, res)) return;
 
@@ -797,10 +800,11 @@ export const writeControllerRegister = async (req, res) => {
       return res.status(403).json({ error: "Este parámetro es solo lectura" });
     }
 
-    setWritingStatus(true);
+    writingElfinId = controller.elfinId;
+    setWritingStatus(writingElfinId, true);
     const writeResult = await writeDefinitionValue({ controller, definition, value });
     publishReadCommands(controller, [definition.register, definition.verifyRegister]);
-    setWritingStatus(false);
+    setWritingStatus(writingElfinId, false);
     invalidateDiagnosticCache(controller._id);
     emitControllerRefresh(controller._id, "register-written");
 
@@ -812,7 +816,7 @@ export const writeControllerRegister = async (req, res) => {
       modbus: writeResult,
     });
   } catch (error) {
-    setWritingStatus(false);
+    setWritingStatus(writingElfinId, false);
     console.error("❌ [REGISTER WRITE ERROR]:", error.message);
     return res.status(500).json({
       error: error?.message || "Error escribiendo el parámetro",
@@ -823,7 +827,11 @@ export const writeControllerRegister = async (req, res) => {
 
 export const diagnosticController = async (req, res) => {
   try {
-    const controller = await findOwnedController(req.params.id, req.user?.id).lean();
+    // Los admins pueden ver el diagnostico de cualquier controlador; los usuarios, solo los propios.
+    const controller = await (req.user?.role === "admin"
+      ? ControllerModel.findById(req.params.id)
+      : findOwnedController(req.params.id, req.user?.id)
+    ).lean();
     if (!controller) return res.status(404).json({ error: "No encontrado" });
     touchControllerPolling(controller._id);
     const bypassCache = String(req.query?.refresh ?? "").trim() === "1";
@@ -1154,6 +1162,7 @@ export const setControllerLs = async (req, res) => {
 };
 
 export const setControllerSetpoint768 = async (req, res) => {
+  let writingElfinId = null;
   try {
     if (!ensureControllerMutationRole(req, res)) return;
 
@@ -1187,20 +1196,21 @@ export const setControllerSetpoint768 = async (req, res) => {
       step: (controller?.setpointScale ?? 10) === 10 ? 0.1 : 1,
     });
 
-    setWritingStatus(true);
+    writingElfinId = controller.elfinId;
+    setWritingStatus(writingElfinId, true);
     const writeResult = await writeDefinitionValue({
       controller,
       definition,
       value: numericValue,
     });
     publishReadCommands(controller, [768]);
-    setWritingStatus(false);
+    setWritingStatus(writingElfinId, false);
     invalidateDiagnosticCache(controller._id);
     emitControllerRefresh(controller._id, "setpoint-768-written");
 
     return res.json({ success: true, newValue: numericValue, modbus: writeResult });
   } catch (error) {
-    setWritingStatus(false);
+    setWritingStatus(writingElfinId, false);
     console.error("❌ [SETPOINT 768 ERROR]:", error.message);
     return res.status(500).json({
       error: "Error modificando setpoint (REG 768).",
