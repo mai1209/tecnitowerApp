@@ -136,10 +136,12 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
       });
     } catch {
       if (isMountedRef.current) {
-        // Si la lectura falla, mantenemos los registros locales y dejamos online=true para habilitar la UI
+        // Si la lectura falla no podemos verificar el equipo: reflejamos estado offline
+        // (mantenemos los registros locales como referencia, pero sin mostrar "online" ni habilitar la escritura como si respondiera).
         setData(prev => ({
           ...prev,
-          online: true,
+          online: false,
+          connectionState: null,
           userCanWrite:
             session?.user?.role === 'admin' || session?.user?.canWrite === true,
           configuredRegisters:

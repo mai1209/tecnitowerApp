@@ -134,14 +134,19 @@ const RemoteControlScreen = (props: any) => {
     if (!canSubmit) return;
 
     const key = getDefinitionKey(definition);
-    const value = localValues[key];
+    const value = localValues[key] ?? definition?.value;
+
+    if (!Number.isFinite(Number(value))) {
+      Alert.alert("Valor inválido", "Ajustá el valor antes de aplicar el cambio.");
+      return;
+    }
 
     setLoadingMap((prev) => ({ ...prev, [key]: true }));
 
     try {
       await writeControllerRegister(
         controllerId,
-        { key, register: definition.register, value },
+        { key, register: definition.register, value: Number(value) },
         token
       );
 

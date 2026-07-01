@@ -122,7 +122,7 @@ function HomeScreen({ navigation, session, onLogout }: Props) {
         try {
           const response = await fetchControllers(session.token);
           if (isMounted) {
-            setControllers(response.controllers);
+            setControllers(Array.isArray(response?.controllers) ? response.controllers : []);
           }
         } catch (err) {
           if (isMounted) {

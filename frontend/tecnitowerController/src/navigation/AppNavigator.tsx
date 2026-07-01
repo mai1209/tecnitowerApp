@@ -7,7 +7,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import HomeScreen from '../screens/HomeScreen';
-import ControllerFormScreem from '../screens/ControllerFormScreem';
+import ControllerFormScreen from '../screens/ControllerFormScreen';
 import ControllerLiveScreen from '../screens/ControllerLiveScreen';
 import ControllerRegisterConfigScreen from '../screens/ControllerRegisterConfigScreen';
 import RemoteControlScreen from '../screens/RemoteControlScreen';
@@ -151,7 +151,7 @@ export const AppNavigator = () => {
               name="ControllerForm"
             >
               {props => (
-                <ControllerFormScreem
+                <ControllerFormScreen
                   {...props}
                   session={session}
                 />

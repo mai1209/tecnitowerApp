@@ -168,7 +168,7 @@ export async function getControllerWebSocketUrl(controllerId: string, authToken:
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const baseUrl = await getApiBaseUrl();
   const url = `${baseUrl}${path}`;
-  console.log("[API REQUEST]", options.method ?? "GET", url);
+  if (__DEV__) console.log("[API REQUEST]", options.method ?? "GET", url);
   const headers: Record<string, string> = {
     Accept: "application/json",
     "Content-Type": "application/json",
@@ -215,7 +215,8 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     }
     const msg = String(error?.message ?? "");
     if (msg.includes("Network request failed") || msg.includes("Failed to fetch")) {
-      throw new Error(`No se pudo conectar con el servidor (url=${url}).`);
+      if (__DEV__) console.warn("[API] Error de red", url, msg);
+      throw new Error("No se pudo conectar con el servidor. Revisá tu conexión a internet.");
     }
     throw error;
   }
