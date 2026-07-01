@@ -23,7 +23,9 @@ const PRESENTATION_READINGS = [
   { key: 'US', label: 'Setpoint máximo' },
   { key: 'TMP1', label: 'Temperatura S1' },
 ];
-const LIVE_REFRESH_INTERVAL_MS = 5000;
+// Refresco periódico de respaldo: el WebSocket ya empuja actualizaciones en
+// tiempo real, así que este intervalo solo cubre por si el WS se cae.
+const LIVE_REFRESH_INTERVAL_MS = 15000;
 
 function isConnectionAlertType(type?: string | null) {
   return type === 'offline' || type === 'elfin_offline' || type === 'modbus_offline';
@@ -208,6 +210,7 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
 
   useEffect(() => {
     let cancelled = false;
+    let reconnectAttempt = 0;
 
     async function connectRealtime() {
       try {
@@ -223,6 +226,7 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
         socketRef.current = socket;
 
         socket.onopen = () => {
+          reconnectAttempt = 0;
           scheduleRealtimeRefresh(100);
         };
 
@@ -241,15 +245,17 @@ function ControllerLiveScreen({ route, navigation, session, onLogout }: any) {
 
         socket.onclose = () => {
           if (cancelled) return;
-          reconnectTimerRef.current = setTimeout(() => {
-            connectRealtime();
-          }, 3000);
+          // Backoff exponencial: 3s, 6s, 12s… hasta 60s, para no martillar el
+          // servidor ni drenar batería cuando está caído.
+          const delay = Math.min(3000 * 2 ** reconnectAttempt, 60000);
+          reconnectAttempt += 1;
+          reconnectTimerRef.current = setTimeout(connectRealtime, delay);
         };
       } catch {
         if (cancelled) return;
-        reconnectTimerRef.current = setTimeout(() => {
-          connectRealtime();
-        }, 5000);
+        const delay = Math.min(3000 * 2 ** reconnectAttempt, 60000);
+        reconnectAttempt += 1;
+        reconnectTimerRef.current = setTimeout(connectRealtime, delay);
       }
     }
 

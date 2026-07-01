@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Alert, Platform, ToastAndroid } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { fetchDiagnostic, writeControllerRegister } from "../services/api";
 import { STORAGE_KEYS } from "../constants/storageKeys";
@@ -151,7 +151,12 @@ const RemoteControlScreen = (props: any) => {
       );
 
       setDirtyMap((prev) => ({ ...prev, [key]: false }));
-      Alert.alert("OK", `${definition.label} actualizado`);
+      const okMsg = `${definition.label} actualizado`;
+      if (Platform.OS === "android") {
+        ToastAndroid.show(okMsg, ToastAndroid.SHORT);
+      } else {
+        Alert.alert("OK", okMsg);
+      }
 
       if (!hasExternalDiag) {
         await refreshDiagnostic();

@@ -20,7 +20,7 @@ import {
 import { AuthSession } from '../types/auth';
 import { PencilLine, SkipForward, Trash2 } from 'lucide-react-native';
 
-const CONTROLLERS_REFRESH_INTERVAL_MS = 5000;
+const CONTROLLERS_REFRESH_INTERVAL_MS = 15000;
 
 type Props = {
   navigation: any;
