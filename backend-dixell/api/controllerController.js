@@ -1095,13 +1095,12 @@ export const diagnosticController = async (req, res) => {
 
     return res.json(response);
   } catch (err) {
+    // Error interno real (no un simple "equipo offline", que se resuelve dentro
+    // del loader devolviendo online:false con 200). Respondemos 500 para no
+    // enmascarar fallos de backend como si el equipo estuviera desconectado.
     console.error("❌ [DIAGNOSTIC ERROR]:", err?.message || err);
-    return res.json({
-      online: false,
-      userCanWrite: canMutateOwnedController(req.user?.role, req.user?.canWrite),
-      probe1Value: null,
-      setpointValue: null,
-      configuredRegisters: [],
+    return res.status(500).json({
+      error: "No se pudo obtener el diagnóstico del controlador.",
     });
   }
 };

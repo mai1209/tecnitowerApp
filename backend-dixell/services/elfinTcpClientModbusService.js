@@ -334,6 +334,12 @@ async function writeHoldingRegisterViaTcpClient({
     return await sendWrite("0x10");
   } catch (err) {
     const fallbackError = err?.message || String(err);
+    // Solo hacemos fallback a 0x06 si el equipo RECHAZÓ 0x10 por función ilegal
+    // (Modbus exception 1). Ante timeouts o errores de transporte NO reintentamos:
+    // el write pudo haber llegado y escribiríamos el mismo registro dos veces.
+    if (!/Modbus exception 1\b/.test(fallbackError)) {
+      throw err;
+    }
     const result = await sendWrite("0x06");
     return { ...result, fallbackError };
   }
